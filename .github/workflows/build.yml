@@ -16,16 +16,16 @@ jobs:
         include:
           - arch: arm64-v8a
             triple: aarch64-linux-android
-            api: 24
+            api: 35
           - arch: armeabi-v7a
             triple: armv7a-linux-androideabi
-            api: 24
+            api: 35
           - arch: x86_64
             triple: x86_64-linux-android
-            api: 24
+            api: 35
           - arch: x86
             triple: i686-linux-android
-            api: 24
+            api: 35
 
     steps:
       - name: Install Build Essentials
@@ -33,13 +33,14 @@ jobs:
           apt-get update
           apt-get install -y build-essential pkg-config curl xz-utils
 
-      - name: Download Python 3.13.14
+      - name: Download and Extract Python 3.13.14
         run: |
+          mkdir python-src
           curl -L https://github.com/zrsx/cpython3/releases/download/v3.13.14/Python-3.13.14.tar.xz -o python.tar.xz
-          tar -xf python.tar.xz
-          mv Python-3.13.14 python-src
+          # Strip-components=1 extracts the contents of the root folder directly into python-src
+          tar -xf python.tar.xz -C python-src --strip-components=1
 
-      - name: Build Host Python (Required for Cross-Build)
+      - name: Build Host Python (Mandatory for Cross-Compile)
         run: |
           mkdir -p python-src/build-host
           cd python-src/build-host
@@ -54,11 +55,11 @@ jobs:
           mkdir -p build-android-${{ matrix.arch }}
           cd build-android-${{ matrix.arch }}
           
-          # 1. Define Paths based on your updated directory structure
+          # 1. Define Paths based on your structure
           export PREFIX=/opt/python3.13-android/${{ matrix.arch }}
-          export SYS_LIB="/system/lib/${{ matrix.triple }}"
-          export SYS_LIB64="/system/lib64/${{ matrix.triple }}"
-          export SYS_INC="/system/include"
+          # Path to architecture-specific libs
+          export SYS_LIB_TRIPLE="/system/lib/${{ matrix.triple }}"
+          export SYS_LIB64_TRIPLE="/system/lib64/${{ matrix.triple }}"
           
           # 2. Setup Toolchain from Docker Image Wrappers
           export CC=${{ matrix.triple }}${{ matrix.api }}-clang
@@ -69,20 +70,21 @@ jobs:
           export RANLIB=${{ matrix.triple }}-ranlib
           export STRIP=${{ matrix.triple }}-strip
 
-          # 3. Configure PKG_CONFIG to find .pc files in the triplet directory
-          export PKG_CONFIG_PATH="${SYS_LIB}/pkgconfig:${SYS_LIB64}/pkgconfig"
+          # 3. Configure PKG_CONFIG_PATH
+          # We check the triplet-specific folders first
+          export PKG_CONFIG_PATH="${SYS_LIB_TRIPLE}/pkgconfig:${SYS_LIB64_TRIPLE}/pkgconfig:/system/lib/pkgconfig:/system/lib64/pkgconfig"
 
-          # 4. Construct LDFLAGS and CPPFLAGS
-          # libpath for RPATH includes both general and triplet-specific paths
-          export LIBPATH_VAR="/system/lib:/system/lib64:${SYS_LIB}:${SYS_LIB64}"
+          # 4. Construct LDFLAGS and CPPFLAGS as requested
+          # Path for RPATH on the target device
+          export LIBPATH_VAR="/system/lib64:/system/lib:${SYS_LIB64_TRIPLE}:${SYS_LIB_TRIPLE}"
           
-          export LDFLAGS="-L${SYS_LIB} -L${SYS_LIB64} -L/system/lib -L/system/lib64 \
+          export LDFLAGS="-L${SYS_LIB_TRIPLE} -L${SYS_LIB64_TRIPLE} -L/system/lib -L/system/lib64 \
             -Wl,-rpath=${LIBPATH_VAR} -Wl,--enable-new-dtags \
             -lncursesw -lreadline -luuid -lsqlite3 -llzma -lffi -lz -lssl -lcrypto -lmpdec -lm"
           
-          export CPPFLAGS="-I${SYS_INC}"
+          export CPPFLAGS="-I/system/include"
 
-          # 5. Run Configure with your exact flags
+          # 5. Run Configure
           ../configure \
             --host=${{ matrix.triple }} \
             --build=x86_64-pc-linux-gnu \
