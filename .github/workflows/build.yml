@@ -1,0 +1,133 @@
+name: Build Python 3.13.14 for Android
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container:
+      image: excedrin/adv:latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: arm64-v8a
+            triple: aarch64-linux-android
+            api: 24
+          - arch: armeabi-v7a
+            triple: armv7a-linux-androideabi
+            api: 24
+          - arch: x86_64
+            triple: x86_64-linux-android
+            api: 24
+          - arch: x86
+            triple: i686-linux-android
+            api: 24
+
+    steps:
+      - name: Install Build Essentials
+        run: |
+          apt-get update
+          apt-get install -y build-essential pkg-config curl xz-utils
+
+      - name: Download Python 3.13.14
+        run: |
+          curl -L https://github.com/zrsx/cpython3/releases/download/v3.13.14/Python-3.13.14.tar.xz -o python.tar.xz
+          tar -xf python.tar.xz
+          mv Python-3.13.14 python-src
+
+      - name: Build Host Python (Required for Cross-Build)
+        run: |
+          mkdir -p python-src/build-host
+          cd python-src/build-host
+          ../configure --prefix=$(pwd)/install
+          make -j$(nproc)
+          make install
+          echo "HOST_PYTHON=$(pwd)/install/bin/python3.13" >> $GITHUB_ENV
+
+      - name: Cross-Compile Python for Android (${{ matrix.arch }})
+        run: |
+          cd python-src
+          mkdir -p build-android-${{ matrix.arch }}
+          cd build-android-${{ matrix.arch }}
+          
+          # 1. Define Paths based on your updated directory structure
+          export PREFIX=/opt/python3.13-android/${{ matrix.arch }}
+          export SYS_LIB="/system/lib/${{ matrix.triple }}"
+          export SYS_LIB64="/system/lib64/${{ matrix.triple }}"
+          export SYS_INC="/system/include"
+          
+          # 2. Setup Toolchain from Docker Image Wrappers
+          export CC=${{ matrix.triple }}${{ matrix.api }}-clang
+          export CXX=${{ matrix.triple }}${{ matrix.api }}-clang++
+          export AR=${{ matrix.triple }}-ar
+          export AS=${{ matrix.triple }}-as
+          export LD=${{ matrix.triple }}-ld
+          export RANLIB=${{ matrix.triple }}-ranlib
+          export STRIP=${{ matrix.triple }}-strip
+
+          # 3. Configure PKG_CONFIG to find .pc files in the triplet directory
+          export PKG_CONFIG_PATH="${SYS_LIB}/pkgconfig:${SYS_LIB64}/pkgconfig"
+
+          # 4. Construct LDFLAGS and CPPFLAGS
+          # libpath for RPATH includes both general and triplet-specific paths
+          export LIBPATH_VAR="/system/lib:/system/lib64:${SYS_LIB}:${SYS_LIB64}"
+          
+          export LDFLAGS="-L${SYS_LIB} -L${SYS_LIB64} -L/system/lib -L/system/lib64 \
+            -Wl,-rpath=${LIBPATH_VAR} -Wl,--enable-new-dtags \
+            -lncursesw -lreadline -luuid -lsqlite3 -llzma -lffi -lz -lssl -lcrypto -lmpdec -lm"
+          
+          export CPPFLAGS="-I${SYS_INC}"
+
+          # 5. Run Configure with your exact flags
+          ../configure \
+            --host=${{ matrix.triple }} \
+            --build=x86_64-pc-linux-gnu \
+            --disable-shared \
+            --disable-test-modules \
+            --with-system-expat \
+            --with-system-libmpdec \
+            --without-ensurepip \
+            --enable-loadable-sqlite-extensions \
+            --with-build-python=$HOST_PYTHON \
+            --prefix=$PREFIX \
+            --with-openssl=/system \
+            --with-openssl-rpath=auto \
+            ac_cv_file__dev_ptmx=yes \
+            ac_cv_file__dev_ptc=no \
+            ac_cv_func_wcsftime=no \
+            ac_cv_func_ftime=no \
+            ac_cv_func_faccessat=no \
+            ac_cv_func_link=no \
+            ac_cv_func_linkat=no \
+            ac_cv_buggy_getaddrinfo=no \
+            ac_cv_little_endian_double=yes \
+            ac_cv_posix_semaphores_enabled=yes \
+            ac_cv_func_sem_open=yes \
+            ac_cv_func_sem_timedwait=yes \
+            ac_cv_func_sem_getvalue=yes \
+            ac_cv_func_sem_unlink=yes \
+            ac_cv_func_shm_open=yes \
+            ac_cv_func_shm_unlink=yes \
+            ac_cv_working_tzset=yes \
+            ac_cv_header_sys_xattr_h=no \
+            ac_cv_func_getgrent=yes \
+            ac_cv_func_getpwent=no
+
+          make -j$(nproc)
+          make install
+
+      - name: Package Build Artifacts
+        run: |
+          cd /opt/python3.13-android/
+          tar -czvf python-3.13.14-android-${{ matrix.arch }}.tar.gz ${{ matrix.arch }}
+          mv *.tar.gz $GITHUB_WORKSPACE/
+
+      - name: Upload Python Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: python-3.13.14-android-${{ matrix.arch }}
+          path: python-3.13.14-android-${{ matrix.arch }}.tar.gz
