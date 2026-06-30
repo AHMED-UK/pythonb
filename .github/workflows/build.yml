@@ -7,7 +7,7 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     container:
       image: excedrin/adv:latest
     strategy:
@@ -82,7 +82,7 @@ jobs:
             -Wl,-rpath=${LIBPATH_VAR} -Wl,--enable-new-dtags \
             -lncursesw -lreadline -luuid -lsqlite3 -llzma -lffi -lz -lssl -lcrypto -lmpdec -lm"
           
-          export CPPFLAGS="-I/system/include -I/system/include/ncursesw -DNCURSES_WIDECHAR"
+          export CPPFLAGS="-I/system/include -I/system/include/ncursesw -DNCURSES_WIDECHAR -I/system/include/uuid"
 
           # 5. Run Configure
           ../configure \
