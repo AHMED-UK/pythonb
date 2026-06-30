@@ -64,11 +64,11 @@ jobs:
           # 2. Setup Toolchain from Docker Image Wrappers
           export CC=${{ matrix.triple }}${{ matrix.api }}-clang
           export CXX=${{ matrix.triple }}${{ matrix.api }}-clang++
-          export AR=${{ matrix.triple }}-ar
-          export AS=${{ matrix.triple }}-as
-          export LD=${{ matrix.triple }}-ld
-          export RANLIB=${{ matrix.triple }}-ranlib
-          export STRIP=${{ matrix.triple }}-strip
+          export AR="llvm-ar"
+          export AS="$CC"
+          export LD="$(CC)"
+          export RANLIB="llvm-ranlib"
+          export STRIP="llvm-strip"
 
           # 3. Configure PKG_CONFIG_PATH
           # We check the triplet-specific folders first
