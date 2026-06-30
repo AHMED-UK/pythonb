@@ -82,7 +82,7 @@ jobs:
             -Wl,-rpath=${LIBPATH_VAR} -Wl,--enable-new-dtags \
             -lncursesw -lreadline -luuid -lsqlite3 -llzma -lffi -lz -lssl -lcrypto -lmpdec -lm"
           
-          export CPPFLAGS="-I/system/include"
+          export CPPFLAGS="-I/system/include -I/system/include/ncursesw -DNCURSES_WIDECHAR"
 
           # 5. Run Configure
           ../configure \
