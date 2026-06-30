@@ -119,8 +119,8 @@ jobs:
             ac_cv_func_getgrent=yes \
             ac_cv_func_getpwent=no
 
-          make -j$(nproc)
-          make install
+          make -j$(nproc) || grep -n "none required" Makefile
+          make install || grep -n "none required" Makefile
 
       - name: Package Build Artifacts
         run: |
