@@ -134,7 +134,7 @@ jobs:
             ac_cv_working_tzset=yes \
             ac_cv_header_sys_xattr_h=no \
             ac_cv_func_getgrent=yes \
-            ac_cv_func_getpwent=no
+            ac_cv_func_getpwent=no || { cat config.log; exit 1; }
 
           make -j$(nproc) || grep -n "none required" Makefile && exit 1
           make install || grep -n "none required" Makefile
