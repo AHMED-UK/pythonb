@@ -78,6 +78,7 @@ jobs:
           # DBM (using GDBM)
           export GDBM_CFLAGS="-I/system/include"
           export GDBM_LIBS="-lgdbm"
+          export LIBS="-landroid_compat $LIBS"
           
           # 2. Setup Toolchain from Docker Image Wrappers
           export CC=${{ matrix.triple }}${{ matrix.api }}-clang
@@ -96,7 +97,7 @@ jobs:
           # Path for RPATH on the target device
           export LIBPATH_VAR="/system/lib64:/system/lib:${SYS_LIB64_TRIPLE}:${SYS_LIB_TRIPLE}"
           
-          export LDFLAGS="-landroid-compat -L${SYS_LIB_TRIPLE} -L${SYS_LIB64_TRIPLE} -L/system/lib -L/system/lib64 -Wl,-rpath=/system/lib -Wl,--enable-new-dtags"
+          export LDFLAGS="-L${SYS_LIB_TRIPLE} -L${SYS_LIB64_TRIPLE} -L/system/lib -L/system/lib64 -Wl,-rpath=/system/lib -Wl,--enable-new-dtags"
           
           export CPPFLAGS="-I/system/include -I/system/include/ncursesw -DNCURSES_WIDECHAR -I/system/include/uuid"
 
