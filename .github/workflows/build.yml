@@ -60,13 +60,24 @@ jobs:
           # Path to architecture-specific libs
           export SYS_LIB_TRIPLE="/system/lib/${{ matrix.triple }}"
           export SYS_LIB64_TRIPLE="/system/lib64/${{ matrix.triple }}"
-          export CURSES_CFLAGS="-I${SYS_INC}/ncursesw -DNCURSES_WIDECHAR"
+          export CURSES_CFLAGS="-I/system/include/ncursesw -DNCURSES_WIDECHAR"
           export CURSES_LIBS="-lncursesw"
           export PANEL_CFLAGS="-I${SYS_INC}/ncursesw"
           export PANEL_LIBS="-lpanelw -lncursesw"
-          export SQLITE3_CFLAGS="-I${SYS_INC}"
+          export SQLITE3_CFLAGS="-I/system/include"
           export SQLITE3_LIBS="-lsqlite3"
           export LIBQLIBS="-lssl -lcrypto -lz"
+          # LZMA (_lzma)
+          export LIBLZMA_CFLAGS="-I${SYS_INC}"
+          export LIBLZMA_LIBS="-llzma"
+          
+          # Readline
+          export READLINE_CFLAGS="-I/system/include"
+          export READLINE_LIBS="-lreadline -lncursesw"
+          
+          # DBM (using GDBM)
+          export GDBM_CFLAGS="-I/system/include"
+          export GDBM_LIBS="-lgdbm"
           
           # 2. Setup Toolchain from Docker Image Wrappers
           export CC=${{ matrix.triple }}${{ matrix.api }}-clang
@@ -85,7 +96,7 @@ jobs:
           # Path for RPATH on the target device
           export LIBPATH_VAR="/system/lib64:/system/lib:${SYS_LIB64_TRIPLE}:${SYS_LIB_TRIPLE}"
           
-          export LDFLAGS="-L${SYS_LIB_TRIPLE} -L${SYS_LIB64_TRIPLE} -L/system/lib -L/system/lib64 -Wl,-rpath=/system/lib -Wl,--enable-new-dtags"
+          export LDFLAGS="-llibandroid_compat -L${SYS_LIB_TRIPLE} -L${SYS_LIB64_TRIPLE} -L/system/lib -L/system/lib64 -Wl,-rpath=/system/lib -Wl,--enable-new-dtags"
           
           export CPPFLAGS="-I/system/include -I/system/include/ncursesw -DNCURSES_WIDECHAR -I/system/include/uuid"
 
