@@ -96,7 +96,7 @@ jobs:
           # Path for RPATH on the target device
           export LIBPATH_VAR="/system/lib64:/system/lib:${SYS_LIB64_TRIPLE}:${SYS_LIB_TRIPLE}"
           
-          export LDFLAGS="-llibandroid_compat -L${SYS_LIB_TRIPLE} -L${SYS_LIB64_TRIPLE} -L/system/lib -L/system/lib64 -Wl,-rpath=/system/lib -Wl,--enable-new-dtags"
+          export LDFLAGS="-landroid-compat -L${SYS_LIB_TRIPLE} -L${SYS_LIB64_TRIPLE} -L/system/lib -L/system/lib64 -Wl,-rpath=/system/lib -Wl,--enable-new-dtags"
           
           export CPPFLAGS="-I/system/include -I/system/include/ncursesw -DNCURSES_WIDECHAR -I/system/include/uuid"
 
