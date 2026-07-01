@@ -67,9 +67,31 @@ jobs:
           export SQLITE3_CFLAGS="-I/system/include"
           export SQLITE3_LIBS="-lsqlite3"
           export LIBQLIBS="-lssl -lcrypto -lz"
+          # libffi
+          export LIBFFI_CFLAGS="-I/system/include/${{ matrix.triple }}"
+          export LIBFFI_LIBS="-L/system/lib/${{ matrix.triple }} -lffi"
+
+          # libxcrypt
+          export LIBXCRYPT_CFLAGS="-I/system/include/${{ matrix.triple }}"
+          export LIBXCRYPT_LIBS="-L/system/lib/${{ matrix.triple }} -lcrypt"
+
+          # bzip2
+          export BZIP2_CFLAGS="-I/system/include/${{ matrix.triple }}"
+          export BZIP2_LIBS="-L/system/lib/${{ matrix.triple }} -lbz2"
+
+          # libuuid
+          export LIBUUID_CFLAGS="-I/system/include/${{ matrix.triple }}"
+          export LIBUUID_LIBS="-L/system/lib/${{ matrix.triple }} -luuid"
+
+          # mpdecimal
+          export LIBMPDEC_CFLAGS="-I/system/include/${{ matrix.triple }}"
+          export LIBMPDEC_LIBS="-L/system/lib/${{ matrix.triple }} -lmpdec"
           # LZMA (_lzma)
-          export LIBLZMA_CFLAGS="-I${SYS_INC}"
           export LIBLZMA_LIBS="-llzma"
+          export _LZMA_CPPFLAGS="-I/system/include/${{ matrix.triple }}"
+          export _LZMA_LDFLAGS="-L/system/lib/${{ matrix.triple }} -llzma"
+          export LIBLZMA_CFLAGS="$_LZMA_CPPFLAGS"
+          export _LZMA_CFLAGS="$_LZMA_CPPFLAGS"
           
           # Readline
           export READLINE_CFLAGS="-I/system/include"
@@ -79,6 +101,7 @@ jobs:
           export GDBM_CFLAGS="-I/system/include"
           export GDBM_LIBS="-lgdbm"
           export LIBS="-landroid_compat $LIBS"
+
           
           # 2. Setup Toolchain from Docker Image Wrappers
           export CC=${{ matrix.triple }}${{ matrix.api }}-clang
