@@ -94,12 +94,12 @@ jobs:
           export _LZMA_CFLAGS="$_LZMA_CPPFLAGS"
           
           # Readline
-          export READLINE_CFLAGS="-I/system/include/readline"
-          export READLINE_LIBS="-lreadline -lncursesw"
+          # export READLINE_CFLAGS="-I/system/include/readline"
+          # export READLINE_LIBS="-lreadline -lncursesw"
           
           # DBM (using GDBM)
-          export GDBM_CFLAGS="-I/system/include"
-          export GDBM_LIBS="-lgdbm"
+          # export GDBM_CFLAGS="-I/system/include"
+          # export GDBM_LIBS="-lgdbm"
           export LIBS="-landroid_compat $LIBS"
 
           
@@ -159,8 +159,8 @@ jobs:
             ac_cv_func_getgrent=yes \
             ac_cv_func_getpwent=no || { cat config.log; exit 1; }
 
-          make -j$(nproc) || grep -n "none required" Makefile && exit 1
-          make install || grep -n "none required" Makefile
+          make -j$(nproc)
+          make install
 
       - name: Package Build Artifacts
         run: |
