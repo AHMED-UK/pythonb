@@ -94,7 +94,7 @@ jobs:
           export _LZMA_CFLAGS="$_LZMA_CPPFLAGS"
           
           # Readline
-          export READLINE_CFLAGS="-I/system/include"
+          export READLINE_CFLAGS="-I/system/include/readline"
           export READLINE_LIBS="-lreadline -lncursesw"
           
           # DBM (using GDBM)
