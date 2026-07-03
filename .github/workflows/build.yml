@@ -54,6 +54,7 @@ jobs:
           cd python-src
           mkdir -p build-android-${{ matrix.arch }}
           cd build-android-${{ matrix.arch }}
+          export PKG_CONFIG_PATH="${SYS_LIB_TRIPLE}/pkgconfig:${SYS_LIB64_TRIPLE}/pkgconfig:/system/lib/pkgconfig:/system/lib64/pkgconfig"
           
           # 1. Define Paths based on your structure
           export PREFIX=/opt/python3.13-android/${{ matrix.arch }}
@@ -94,12 +95,12 @@ jobs:
           export _LZMA_CFLAGS="$_LZMA_CPPFLAGS"
           
           # Readline
-          # export READLINE_CFLAGS="-I/system/include/readline"
-          # export READLINE_LIBS="-lreadline -lncursesw"
+          export READLINE_CFLAGS="-I/system/include/readline $(pkg-config --cflags readline)"
+          export READLINE_LIBS="$(pkg-config --libs readline) -lreadline -lncursesw"
           
           # DBM (using GDBM)
-          # export GDBM_CFLAGS="-I/system/include"
-          # export GDBM_LIBS="-lgdbm"
+          export GDBM_CFLAGS="-I/system/include"
+          export GDBM_LIBS="-lgdbm_compat"
           export LIBS="-landroid_compat $LIBS"
 
           
