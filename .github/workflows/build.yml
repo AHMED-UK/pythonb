@@ -191,6 +191,7 @@ jobs:
           find bin -type f -executable -exec llvm-strip --strip-all {} + || true
           find lib -type f -name "*.so*" -exec llvm-strip --strip-unneeded {} + || true
           find . -type f -empty -delete
+          find . -type f -empty -exec rm -f {} \;
 
           # 4. Create Tarball containing only essential directories
           tar -cJvf "$GITHUB_WORKSPACE/python-${{ github.event.inputs.py_version }}-android-${{ matrix.arch }}.tar.xz" \
