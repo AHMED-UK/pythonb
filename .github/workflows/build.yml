@@ -74,7 +74,7 @@ jobs:
           # 3. Environment Variables
           # Added the specific arch path to LDFLAGS
           export LDFLAGS="-L${SYS_LIB_ARCH} -L${SYS_LIB_TRIPLE} -L/system/lib64 -L/system/lib -Wl,-rpath=/system/lib -Wl,--enable-new-dtags"
-          export CPPFLAGS="-I${SYS_INC} -I${SYS_INC}/ncursesw -DNCURSES_WIDECHAR"
+          export CPPFLAGS="-I${SYS_INC} -I${SYS_INC}/uuid -I${SYS_INC}/readline -I${SYS_INC}/ -I${SYS_INC}/ncursesw -DNCURSES_WIDECHAR"
           export CFLAGS="-fPIC"
           export LIBS="-landroid_compat"
 
