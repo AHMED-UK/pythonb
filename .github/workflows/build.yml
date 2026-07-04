@@ -17,8 +17,8 @@ permissions:
   actions: read
 
 env:
-  # Force the GitHub Actions Runner to use Node 26 to bypass deprecation warnings for actions
-  ACTIONS_RUNNER_FORCED_NODE_VERSION: "node26"
+  # Force GitHub Actions to use Node 24 for runner execution as per 2026 standards
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
 
 jobs:
   build:
@@ -53,11 +53,19 @@ jobs:
           mkdir python-src
           curl -L "${{ github.event.inputs.py_url }}" -o python.tar.xz
           tar -xf python.tar.xz -C python-src --strip-components=1
+          
+          cd python-src
+          # 1. Logical Fix: Remove git metadata inside the source folder
+          rm -rf .git || true
+          
+          # 2. Enhancement: Upgrade C standard from C11 to C17
+          # We modify both configure and the Makefile template to ensure it propagates
+          sed -i 's/-std=c11/-std=c17/g' configure
+          sed -i 's/-std=c11/-std=c17/g' Makefile.pre.in
 
       - name: Build Host Python
         run: |
           cd python-src
-          rm -rf .git || true
           mkdir build-host
           cd build-host
           ../configure --prefix=$(pwd)/install
@@ -72,7 +80,7 @@ jobs:
           mkdir -p build-android-${{ matrix.arch }}
           cd build-android-${{ matrix.arch }}
 
-          # 1. Setup Toolchain
+          # Setup Toolchain
           export CC=${{ matrix.triple }}${{ matrix.api }}-clang
           export CXX=${{ matrix.triple }}${{ matrix.api }}-clang++
           export AR="llvm-ar"
@@ -81,13 +89,13 @@ jobs:
           export STRIP="llvm-strip"
           export READELF="llvm-readelf"
 
-          # 2. Define Paths
+          # Define Paths
           export PREFIX="$GITHUB_WORKSPACE/python-install/${{ matrix.arch }}"
           export SYS_INC="/system/include"
           export SYS_LIB_ARCH="/system/lib/${{ matrix.arch }}"
           export SYS_LIB_TRIPLE="/system/lib/${{ matrix.triple }}"
 
-          # 3. Environment Variables
+          # Environment Variables
           export LDFLAGS="-L${SYS_LIB_TRIPLE} -L${SYS_LIB_ARCH} -L/system/lib64 -L/system/lib -Wl,-rpath=/system/lib -Wl,--enable-new-dtags"
           export CPPFLAGS="-I${SYS_INC} -I${SYS_INC}/ncursesw -I${SYS_INC}/uuid -DNCURSES_WIDECHAR"
           export CFLAGS="-fPIC"
@@ -119,7 +127,7 @@ jobs:
           export BZIP2_CFLAGS="-I${SYS_INC}"
           export BZIP2_LIBS="-L${SYS_LIB_TRIPLE} -lbz2"
 
-          # 4. Configure using Official Termux Overwrites + Requested Fixes
+          # Configure using Official Termux Overwrites + C17 + System Libs
           ../configure \
             --host=${{ matrix.triple }} \
             --build=x86_64-pc-linux-gnu \
@@ -166,20 +174,23 @@ jobs:
       - name: Clean and Package Python Artifacts
         run: |
           PREFIX="$GITHUB_WORKSPACE/python-install/${{ matrix.arch }}"
+          V_SHORT=$(echo "${{ github.event.inputs.py_version }}" | cut -d. -f1-2)
           cd "$PREFIX"
 
-          # Remove tests and pycache to keep it strictly runtime
-          V_SHORT=$(echo "${{ github.event.inputs.py_version }}" | cut -d. -f1-2)
+          # 1. Fix Shebangs: Replace build-time absolute path with portable /usr/bin/env
+          find bin -type f -exec sed -i "1s|^#!$PREFIX/bin/python${V_SHORT}|#!/usr/bin/env python${V_SHORT}|" {} +
+
+          # 2. Remove non-Python related things and test suites
           rm -rf lib/python${V_SHORT}/test
           rm -rf lib/python${V_SHORT}/*/test
           rm -rf lib/python${V_SHORT}/*/tests
           find . -name "__pycache__" -type d -exec rm -rf {} +
 
-          # Strip binaries to keep only Python related runtime
+          # 3. Strip binaries to keep only Python related runtime
           find bin -type f -executable -exec llvm-strip --strip-all {} + || true
           find lib -type f -name "*.so*" -exec llvm-strip --strip-unneeded {} + || true
 
-          # Create Tarball containing only essential directories
+          # 4. Create Tarball containing only essential directories
           tar -czvf $GITHUB_WORKSPACE/python-${{ github.event.inputs.py_version }}-android-${{ matrix.arch }}.tar.gz \
             bin lib include share
 
