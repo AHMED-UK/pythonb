@@ -1,9 +1,20 @@
-name: Build Python 3.13.14 for Android
+name: Build Python for Android
 
 on:
   workflow_dispatch:
-  push:
-    branches: [ main ]
+    inputs:
+      py_version:
+        description: 'Python Version (e.g., 3.13.14)'
+        required: true
+        default: '3.13.14'
+      py_url:
+        description: 'Python Source Tarball URL'
+        required: true
+        default: 'https://github.com/zrsx/cpython3/releases/download/v3.13.14/Python-3.13.14.tar.xz'
+
+env:
+  # Force the GitHub Actions Runner to use Node 26 to bypass deprecation warnings for actions
+  ACTIONS_RUNNER_FORCED_NODE_VERSION: "node26"
 
 jobs:
   build:
@@ -33,10 +44,10 @@ jobs:
           apt-get update
           apt-get install -y build-essential pkg-config curl xz-utils git
 
-      - name: Download and Extract Python 3.13.14
+      - name: Download and Extract Python
         run: |
           mkdir python-src
-          curl -L https://github.com/zrsx/cpython3/releases/download/v3.13.14/Python-3.13.14.tar.xz -o python.tar.xz
+          curl -L "${{ github.event.inputs.py_url }}" -o python.tar.xz
           tar -xf python.tar.xz -C python-src --strip-components=1
 
       - name: Build Host Python
@@ -47,7 +58,8 @@ jobs:
           ../configure --prefix=$(pwd)/install
           make -j$(nproc)
           make install
-          echo "HOST_PYTHON=$(pwd)/install/bin/python3.13" >> $GITHUB_ENV
+          V_SHORT=$(echo "${{ github.event.inputs.py_version }}" | cut -d. -f1-2)
+          echo "HOST_PYTHON=$(pwd)/install/bin/python${V_SHORT}" >> $GITHUB_ENV
 
       - name: Cross-Compile Python for Android (${{ matrix.arch }})
         run: |
@@ -65,44 +77,32 @@ jobs:
           export READELF="llvm-readelf"
 
           # 2. Define Paths
-          export PREFIX="/opt/python3.13-android/${{ matrix.arch }}"
+          export PREFIX="$GITHUB_WORKSPACE/python-install/${{ matrix.arch }}"
           export SYS_INC="/system/include"
           export SYS_LIB_ARCH="/system/lib/${{ matrix.arch }}"
           export SYS_LIB_TRIPLE="/system/lib/${{ matrix.triple }}"
 
           # 3. Environment Variables
-          # Ensure both arch and triple lib paths are present for the linker
-          export LDFLAGS="-L${SYS_LIB_ARCH} -L${SYS_LIB_TRIPLE} -L/system/lib64 -L/system/lib -Wl,-rpath=/system/lib -Wl,--enable-new-dtags"
-          # Include /system/include/uuid as requested
+          export LDFLAGS="-L${SYS_LIB_TRIPLE} -L${SYS_LIB_ARCH} -L/system/lib64 -L/system/lib -Wl,-rpath=/system/lib -Wl,--enable-new-dtags"
           export CPPFLAGS="-I${SYS_INC} -I${SYS_INC}/ncursesw -I${SYS_INC}/uuid -DNCURSES_WIDECHAR"
           export CFLAGS="-fPIC"
           export LIBS="-landroid_compat"
 
           export PKG_CONFIG_LIBDIR="${SYS_LIB_TRIPLE}/pkgconfig:${SYS_LIB_ARCH}/pkgconfig:/system/lib/pkgconfig"
 
-          # --- Python 3.13 Specific Module Flags ---
-          
-          # NDBM / DBM (Using the compat layer)
+          # Module Flags for System Libraries
+          export LIBMPDEC_CFLAGS="-I${SYS_INC}"
+          export LIBMPDEC_LIBS="-L${SYS_LIB_TRIPLE} -lmpdec"
           export NDBM_CFLAGS="-I${SYS_INC}"
           export NDBM_LIBS="-L${SYS_LIB_TRIPLE} -lgdbm_compat -lgdbm"
-          
-          # GDBM
           export GDBM_CFLAGS="-I${SYS_INC}"
           export GDBM_LIBS="-L${SYS_LIB_TRIPLE} -lgdbm"
-
-          # Readline & Curses
           export LIBREADLINE_CFLAGS="-I${SYS_INC}"
           export LIBREADLINE_LIBS="-L${SYS_LIB_TRIPLE} -lreadline -lncursesw"
           export CURSES_CFLAGS="-I${SYS_INC}/ncursesw -DNCURSES_WIDECHAR"
           export CURSES_LIBS="-L${SYS_LIB_TRIPLE} -lncursesw"
-
-          # UUID
           export LIBUUID_CFLAGS="-I${SYS_INC}/uuid"
           export LIBUUID_LIBS="-L${SYS_LIB_TRIPLE} -luuid"
-
-          # Other Dependencies
-          export LIBMPDEC_CFLAGS="-I${SYS_INC}"
-          export LIBMPDEC_LIBS="-L${SYS_LIB_TRIPLE} -lmpdec"
           export LIBSSL_CFLAGS="-I${SYS_INC}"
           export LIBSSL_LIBS="-L${SYS_LIB_TRIPLE} -lssl -lcrypto"
           export SQLITE3_CFLAGS="-I${SYS_INC}"
@@ -114,27 +114,23 @@ jobs:
           export BZIP2_CFLAGS="-I${SYS_INC}"
           export BZIP2_LIBS="-L${SYS_LIB_TRIPLE} -lbz2"
 
-          # 4. Configure
+          # 4. Configure using Official Termux Overwrites + Requested Fixes
           ../configure \
             --host=${{ matrix.triple }} \
             --build=x86_64-pc-linux-gnu \
             --prefix=$PREFIX \
             --with-build-python=$HOST_PYTHON \
-            --disable-shared \
-            --disable-test-modules \
+            --with-system-ffi \
             --with-system-expat \
             --with-system-libmpdec \
-            --with-system-ffi \
             --without-ensurepip \
+            --enable-loadable-sqlite-extensions \
+            --disable-shared \
+            --disable-test-modules \
             --with-dbmliborder=ndbm:gdbm \
             --with-readline=readline \
-            --enable-loadable-sqlite-extensions \
             --with-openssl=/system \
             --with-openssl-rpath=auto \
-            ac_cv_header_ndbm_h=yes \
-            ac_cv_header_gdbm_ndbm_h=no \
-            ac_cv_header_gdbm_dash_ndbm_h=no \
-            ac_cv_search_dbm_open="-lgdbm_compat -lgdbm" \
             ac_cv_file__dev_ptmx=yes \
             ac_cv_file__dev_ptc=no \
             ac_cv_func_wcsftime=no \
@@ -154,19 +150,36 @@ jobs:
             ac_cv_working_tzset=yes \
             ac_cv_header_sys_xattr_h=no \
             ac_cv_func_getgrent=yes \
-            ac_cv_func_getpwent=no || { tail -n 200 config.log; exit 1; }
+            ac_cv_header_ndbm_h=yes \
+            ac_cv_header_gdbm_ndbm_h=no \
+            ac_cv_header_gdbm_dash_ndbm_h=no \
+            ac_cv_search_dbm_open="-lgdbm_compat -lgdbm" || { tail -n 200 config.log; exit 1; }
 
           make -j$(nproc)
           make install
 
-      - name: Package Build Artifacts
+      - name: Clean and Package Python Artifacts
         run: |
-          cd /opt/python3.13-android/
-          tar -czvf python-3.13.14-android-${{ matrix.arch }}.tar.gz ${{ matrix.arch }}
-          mv *.tar.gz $GITHUB_WORKSPACE/
+          PREFIX="$GITHUB_WORKSPACE/python-install/${{ matrix.arch }}"
+          cd "$PREFIX"
+
+          # Remove tests and pycache to keep it strictly runtime
+          V_SHORT=$(echo "${{ github.event.inputs.py_version }}" | cut -d. -f1-2)
+          rm -rf lib/python${V_SHORT}/test
+          rm -rf lib/python${V_SHORT}/*/test
+          rm -rf lib/python${V_SHORT}/*/tests
+          find . -name "__pycache__" -type d -exec rm -rf {} +
+
+          # Strip binaries to keep only Python related runtime
+          find bin -type f -executable -exec llvm-strip --strip-all {} + || true
+          find lib -type f -name "*.so*" -exec llvm-strip --strip-unneeded {} + || true
+
+          # Create Tarball containing only essential directories
+          tar -czvf $GITHUB_WORKSPACE/python-${{ github.event.inputs.py_version }}-android-${{ matrix.arch }}.tar.gz \
+            bin lib include share
 
       - name: Upload Python Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: python-3.13.14-android-${{ matrix.arch }}
-          path: python-3.13.14-android-${{ matrix.arch }}.tar.gz
+          name: python-${{ github.event.inputs.py_version }}-android-${{ matrix.arch }}
+          path: python-${{ github.event.inputs.py_version }}-android-${{ matrix.arch }}.tar.gz
