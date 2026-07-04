@@ -57,6 +57,7 @@ jobs:
       - name: Build Host Python
         run: |
           cd python-src
+          rm -rf .git || true
           mkdir build-host
           cd build-host
           ../configure --prefix=$(pwd)/install
