@@ -80,7 +80,7 @@ jobs:
 
           # --- Python 3.13 Specific Module Flags ---
           
-          # GDBM & NDBM (Using the Triple directory for compat libs)
+          # GDBM & NDBM (Crucial for _dbm and _gdbm)
           export GDBM_CFLAGS="-I${SYS_INC}"
           export GDBM_LIBS="-L${SYS_LIB_TRIPLE} -lgdbm"
           export NDBM_CFLAGS="-I${SYS_INC}"
@@ -128,8 +128,7 @@ jobs:
             --with-openssl=/system \
             --with-openssl-rpath=auto \
             ac_cv_header_ndbm_h=yes \
-            ac_cv_header_gdbm_ndbm_h=no \
-            ac_cv_lib_gdbm_compat_dbm_open=yes \
+            ac_cv_search_dbm_open="-lgdbm_compat -lgdbm" \
             ac_cv_file__dev_ptmx=yes \
             ac_cv_file__dev_ptc=no \
             ac_cv_func_wcsftime=no \
