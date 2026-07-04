@@ -61,6 +61,7 @@ jobs:
           # 2. Enhancement: Upgrade C standard from C11 to C17
           # We modify both configure and the Makefile template to ensure it propagates
           sed -i 's/-std=c11/-std=c17/g' configure
+          sed -i 's/-std=c11/-std=c17/g' configure.ac
           sed -i 's/-std=c11/-std=c17/g' Makefile.pre.in
 
       - name: Build Host Python
@@ -178,7 +179,7 @@ jobs:
           cd "$PREFIX"
 
           # 1. Fix Shebangs: Replace build-time absolute path with portable /usr/bin/env
-          find bin -type f -exec sed -i "1s|^#!$PREFIX/bin/python${V_SHORT}|#!/usr/bin/env python${V_SHORT}|" {} +
+          find . -type f -exec sed -i "1s|^#!$PREFIX/bin/python${V_SHORT}|#!/usr/bin/env python${V_SHORT}|" {} +
 
           # 2. Remove non-Python related things and test suites
           rm -rf lib/python${V_SHORT}/test
@@ -189,9 +190,10 @@ jobs:
           # 3. Strip binaries to keep only Python related runtime
           find bin -type f -executable -exec llvm-strip --strip-all {} + || true
           find lib -type f -name "*.so*" -exec llvm-strip --strip-unneeded {} + || true
+          find . -type f -empty -delete
 
           # 4. Create Tarball containing only essential directories
-          tar -czvf $GITHUB_WORKSPACE/python-${{ github.event.inputs.py_version }}-android-${{ matrix.arch }}.tar.gz \
+          tar -cJvf "$GITHUB_WORKSPACE/python-${{ github.event.inputs.py_version }}-android-${{ matrix.arch }}.tar.xz" \
             bin lib include share
 
       - name: Upload Python Artifact
