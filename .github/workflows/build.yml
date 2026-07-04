@@ -31,19 +31,20 @@ jobs:
       - name: Install Build Essentials
         run: |
           apt-get update
-          apt-get install -y build-essential pkg-config curl xz-utils
+          apt-get install -y build-essential pkg-config curl xz-utils git
 
       - name: Download and Extract Python 3.13.14
         run: |
           mkdir python-src
+          # Note: If 3.13.14 is not yet released, this URL may need to be adjusted to 3.13.1
           curl -L https://github.com/zrsx/cpython3/releases/download/v3.13.14/Python-3.13.14.tar.xz -o python.tar.xz
-          # Strip-components=1 extracts the contents of the root folder directly into python-src
           tar -xf python.tar.xz -C python-src --strip-components=1
 
-      - name: Build Host Python (Mandatory for Cross-Compile)
+      - name: Build Host Python
         run: |
-          mkdir -p python-src/build-host
-          cd python-src/build-host
+          cd python-src
+          mkdir build-host
+          cd build-host
           ../configure --prefix=$(pwd)/install
           make -j$(nproc)
           make install
@@ -54,89 +55,55 @@ jobs:
           cd python-src
           mkdir -p build-android-${{ matrix.arch }}
           cd build-android-${{ matrix.arch }}
-          export PKG_CONFIG_PATH="${SYS_LIB_TRIPLE}/pkgconfig:${SYS_LIB64_TRIPLE}/pkgconfig:/system/lib/pkgconfig:/system/lib64/pkgconfig"
-          
-          # 1. Define Paths based on your structure
-          export PREFIX=/opt/python3.13-android/${{ matrix.arch }}
-          # Path to architecture-specific libs
-          export SYS_LIB_TRIPLE="/system/lib/${{ matrix.triple }}"
-          export SYS_LIB64_TRIPLE="/system/lib64/${{ matrix.triple }}"
-          export CURSES_CFLAGS="-I/system/include/ncursesw -DNCURSES_WIDECHAR"
-          export CURSES_LIBS="-lncursesw -Wl,--enable-new-dtags"
-          export PANEL_CFLAGS="-I${SYS_INC}/ncursesw"
-          export PANEL_LIBS="-lpanelw -lncursesw"
-          export SQLITE3_CFLAGS="-I/system/include"
-          export SQLITE3_LIBS="-lsqlite3"
-          export LIBQLIBS="-lssl -lcrypto -lz"
-          # libffi
-          export LIBFFI_CFLAGS="-I/system/include/${{ matrix.triple }}"
-          export LIBFFI_LIBS="-L/system/lib/${{ matrix.triple }} -lffi"
 
-          # libxcrypt
-          export LIBXCRYPT_CFLAGS="-I/system/include/${{ matrix.triple }}"
-          export LIBXCRYPT_LIBS="-L/system/lib/${{ matrix.triple }} -lcrypt"
-
-          # bzip2
-          export BZIP2_CFLAGS="-I/system/include/${{ matrix.triple }}"
-          export BZIP2_LIBS="-L/system/lib/${{ matrix.triple }} -lbz2"
-
-          # libuuid
-          export LIBUUID_CFLAGS="-I/system/include/${{ matrix.triple }}"
-          export LIBUUID_LIBS="-L/system/lib/${{ matrix.triple }} -luuid"
-
-          # mpdecimal
-          export LIBMPDEC_CFLAGS="-I/system/include/${{ matrix.triple }}"
-          export LIBMPDEC_LIBS="-L/system/lib/${{ matrix.triple }} -lmpdec"
-          # LZMA (_lzma)
-          export LIBLZMA_LIBS="-llzma"
-          export _LZMA_CPPFLAGS="-I/system/include/${{ matrix.triple }}"
-          export _LZMA_LDFLAGS="-L/system/lib/${{ matrix.triple }} -llzma"
-          export LIBLZMA_CFLAGS="$_LZMA_CPPFLAGS"
-          export _LZMA_CFLAGS="$_LZMA_CPPFLAGS"
-          
-          # Readline
-          export READLINE_CFLAGS="$CURSES_CFLAGS -I/system/include "
-          export READLINE_LIBS="$CURSES_LIBS $(pkg-config --libs readline) -lreadline -lncursesw"
-          
-          # DBM (using GDBM)
-          export GDBM_CFLAGS="-I/system/include"
-          export GDBM_LIBS="-lgdbm_compat"
-          export LIBS="-landroid_compat $LIBS"
-
-          
-          # 2. Setup Toolchain from Docker Image Wrappers
+          # 1. Setup Toolchain (Using Docker wrappers)
           export CC=${{ matrix.triple }}${{ matrix.api }}-clang
           export CXX=${{ matrix.triple }}${{ matrix.api }}-clang++
           export AR="llvm-ar"
-          export AS="$CC"
-          export LD="$CC"
+          export NM="llvm-nm"
           export RANLIB="llvm-ranlib"
           export STRIP="llvm-strip"
+          export READELF="llvm-readelf"
 
-          # 3. Configure PKG_CONFIG_PATH
-          # We check the triplet-specific folders first
-          export PKG_CONFIG_PATH="${SYS_LIB_TRIPLE}/pkgconfig:${SYS_LIB64_TRIPLE}/pkgconfig:/system/lib/pkgconfig:/system/lib64/pkgconfig"
+          # 2. Define Paths
+          export PREFIX="/opt/python3.13-android/${{ matrix.arch }}"
+          export SYS_INC="/system/include"
+          export SYS_LIB="/system/lib/${{ matrix.triple }}"
 
-          # 4. Construct LDFLAGS and CPPFLAGS as requested
-          # Path for RPATH on the target device
-          export LIBPATH_VAR="/system/lib64:/system/lib:${SYS_LIB64_TRIPLE}:${SYS_LIB_TRIPLE}"
+          # 3. Termux-style Environment Variables
+          export PKG_CONFIG_PATH="${SYS_LIB}/pkgconfig:/system/lib/pkgconfig"
+          export CFLAGS="-fPIC"
+          export CPPFLAGS="-I${SYS_INC} -I${SYS_INC}/ncursesw -DNCURSES_WIDECHAR"
+          export LDFLAGS="-L${SYS_LIB} -L/system/lib -Wl,-rpath=/system/lib -Wl,--enable-new-dtags"
           
-          export LDFLAGS="-L$SYS_LIB_TRIPLE -L$SYS_LIB64_TRIPLE -L/system/lib -L/system/lib64 -L/system/lib/${{ matrix.arch }} -L/system/lib64/${{ matrix.arch }} -Wl,-rpath=/system/lib -Wl,--enable-new-dtags"
-          
-          export CPPFLAGS="-I/system/include -I/system/include/ncursesw -DNCURSES_WIDECHAR -I/system/include/uuid"
+          # Module specific flags (Required for Python 3.13 detection)
+          export LIBMPDEC_CFLAGS="-I${SYS_INC}"
+          export LIBMPDEC_LIBS="-L${SYS_LIB} -lmpdec"
+          export LIBSSL_CFLAGS="-I${SYS_INC}"
+          export LIBSSL_LIBS="-L${SYS_LIB} -lssl -lcrypto"
+          export SQLITE3_CFLAGS="-I${SYS_INC}"
+          export SQLITE3_LIBS="-L${SYS_LIB} -lsqlite3"
+          export LIBFFI_CFLAGS="-I${SYS_INC}"
+          export LIBFFI_LIBS="-L${SYS_LIB} -lffi"
+          export LIBLZMA_CFLAGS="-I${SYS_INC}"
+          export LIBLZMA_LIBS="-L${SYS_LIB} -llzma"
+          export BZIP2_CFLAGS="-I${SYS_INC}"
+          export BZIP2_LIBS="-L${SYS_LIB} -lbz2"
+          export LIBS="-landroid_compat"
 
-          # 5. Run Configure
+          # 4. Configure with Termux-mandated flags
           ../configure \
             --host=${{ matrix.triple }} \
             --build=x86_64-pc-linux-gnu \
+            --prefix=$PREFIX \
+            --with-build-python=$HOST_PYTHON \
             --disable-shared \
             --disable-test-modules \
             --with-system-expat \
             --with-system-libmpdec \
+            --with-system-ffi \
             --without-ensurepip \
             --enable-loadable-sqlite-extensions \
-            --with-build-python=$HOST_PYTHON \
-            --prefix=$PREFIX \
             --with-openssl=/system \
             --with-openssl-rpath=auto \
             ac_cv_file__dev_ptmx=yes \
@@ -158,7 +125,7 @@ jobs:
             ac_cv_working_tzset=yes \
             ac_cv_header_sys_xattr_h=no \
             ac_cv_func_getgrent=yes \
-            ac_cv_func_getpwent=no || { cat config.log; exit 1; }
+            ac_cv_func_getpwent=no
 
           make -j$(nproc)
           make install
