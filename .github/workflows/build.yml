@@ -71,7 +71,7 @@ jobs:
           export SYS_LIB_TRIPLE="/system/lib/${{ matrix.triple }}"
 
           # 3. Environment Variables
-          export LDFLAGS="-L${SYS_LIB_ARCH} -L${SYS_LIB_TRIPLE} -L/system/lib64 -L/system/lib -Wl,-rpath=/system/lib -Wl,--enable-new-dtags"
+          export LDFLAGS="-L${SYS_LIB_TRIPLE} -L${SYS_LIB_ARCH} -L/system/lib64 -L/system/lib -Wl,-rpath=/system/lib -Wl,--enable-new-dtags"
           export CPPFLAGS="-I${SYS_INC} -I${SYS_INC}/ncursesw -I${SYS_INC}/uuid -DNCURSES_WIDECHAR"
           export CFLAGS="-fPIC"
           export LIBS="-landroid_compat"
@@ -80,11 +80,11 @@ jobs:
 
           # --- Python 3.13 Specific Module Flags ---
           
-          # GDBM & NDBM (Crucial for _dbm module)
+          # GDBM & NDBM (Using the Triple directory for compat libs)
           export GDBM_CFLAGS="-I${SYS_INC}"
-          export GDBM_LIBS="-L${SYS_LIB_ARCH} -lgdbm"
+          export GDBM_LIBS="-L${SYS_LIB_TRIPLE} -lgdbm"
           export NDBM_CFLAGS="-I${SYS_INC}"
-          export NDBM_LIBS="-L${SYS_LIB_ARCH} -lgdbm_compat -lgdbm"
+          export NDBM_LIBS="-L${SYS_LIB_TRIPLE} -lgdbm_compat -lgdbm"
 
           # Readline & Curses
           export LIBREADLINE_CFLAGS="-I${SYS_INC}"
@@ -128,7 +128,8 @@ jobs:
             --with-openssl=/system \
             --with-openssl-rpath=auto \
             ac_cv_header_ndbm_h=yes \
-            ac_cv_header_gdbm_ndbm_h=yes \
+            ac_cv_header_gdbm_ndbm_h=no \
+            ac_cv_lib_gdbm_compat_dbm_open=yes \
             ac_cv_file__dev_ptmx=yes \
             ac_cv_file__dev_ptc=no \
             ac_cv_func_wcsftime=no \
