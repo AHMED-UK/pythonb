@@ -62,7 +62,7 @@ jobs:
           export SYS_LIB_TRIPLE="/system/lib/${{ matrix.triple }}"
           export SYS_LIB64_TRIPLE="/system/lib64/${{ matrix.triple }}"
           export CURSES_CFLAGS="-I/system/include/ncursesw -DNCURSES_WIDECHAR"
-          export CURSES_LIBS="-lncursesw"
+          export CURSES_LIBS="-lncursesw -Wl,--enable-new-dtags"
           export PANEL_CFLAGS="-I${SYS_INC}/ncursesw"
           export PANEL_LIBS="-lpanelw -lncursesw"
           export SQLITE3_CFLAGS="-I/system/include"
@@ -95,8 +95,8 @@ jobs:
           export _LZMA_CFLAGS="$_LZMA_CPPFLAGS"
           
           # Readline
-          export READLINE_CFLAGS="-I/system/include/readline $(pkg-config --cflags readline)"
-          export READLINE_LIBS="$(pkg-config --libs readline) -lreadline -lncursesw"
+          export READLINE_CFLAGS="$CURSES_CFLAGS -I/system/include "
+          export READLINE_LIBS="$CURSES_LIBS $(pkg-config --libs readline) -lreadline -lncursesw"
           
           # DBM (using GDBM)
           export GDBM_CFLAGS="-I/system/include"
