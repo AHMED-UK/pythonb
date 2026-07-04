@@ -64,24 +64,39 @@ jobs:
           export STRIP="llvm-strip"
           export READELF="llvm-readelf"
 
-          # 2. Define Paths based on your specific structure
+          # 2. Define Paths
           export PREFIX="/opt/python3.13-android/${{ matrix.arch }}"
           export SYS_INC="/system/include"
-          # Path where you stated landroid_compat exists
           export SYS_LIB_ARCH="/system/lib/${{ matrix.arch }}"
           export SYS_LIB_TRIPLE="/system/lib/${{ matrix.triple }}"
 
           # 3. Environment Variables
-          # Added the specific arch path to LDFLAGS
           export LDFLAGS="-L${SYS_LIB_ARCH} -L${SYS_LIB_TRIPLE} -L/system/lib64 -L/system/lib -Wl,-rpath=/system/lib -Wl,--enable-new-dtags"
-          export CPPFLAGS="-I${SYS_INC} -I${SYS_INC}/uuid -I${SYS_INC}/readline -I${SYS_INC}/ -I${SYS_INC}/ncursesw -DNCURSES_WIDECHAR"
+          # Added /system/include/uuid to CPPFLAGS as requested
+          export CPPFLAGS="-I${SYS_INC} -I${SYS_INC}/ncursesw -I${SYS_INC}/uuid -DNCURSES_WIDECHAR"
           export CFLAGS="-fPIC"
           export LIBS="-landroid_compat"
 
-          # Force pkg-config to look at Android system paths
           export PKG_CONFIG_LIBDIR="${SYS_LIB_TRIPLE}/pkgconfig:${SYS_LIB_ARCH}/pkgconfig:/system/lib/pkgconfig"
 
-          # Module specific flags for Python 3.13 (Termux Style)
+          # --- Python 3.13 Specific Module Flags ---
+          
+          # Readline & Curses
+          export LIBREADLINE_CFLAGS="-I${SYS_INC}"
+          export LIBREADLINE_LIBS="-L${SYS_LIB_ARCH} -lreadline -lncursesw"
+          export CURSES_CFLAGS="-I${SYS_INC}/ncursesw -DNCURSES_WIDECHAR"
+          export CURSES_LIBS="-L${SYS_LIB_ARCH} -lncursesw"
+
+          # GDBM / NDBM (Headers in /system/include)
+          export GDBM_CFLAGS="-I${SYS_INC}"
+          export GDBM_LIBS="-L${SYS_LIB_ARCH} -lgdbm"
+          export NDBM_LIBS="-L${SYS_LIB_ARCH} -lgdbm_compat -lgdbm"
+
+          # UUID (Headers in /system/include/uuid)
+          export LIBUUID_CFLAGS="-I${SYS_INC}/uuid"
+          export LIBUUID_LIBS="-L${SYS_LIB_ARCH} -luuid"
+
+          # Other Dependencies
           export LIBMPDEC_CFLAGS="-I${SYS_INC}"
           export LIBMPDEC_LIBS="-L${SYS_LIB_ARCH} -lmpdec"
           export LIBSSL_CFLAGS="-I${SYS_INC}"
@@ -107,6 +122,8 @@ jobs:
             --with-system-libmpdec \
             --with-system-ffi \
             --without-ensurepip \
+            --with-dbmliborder=gdbm:ndbm \
+            --with-readline=readline \
             --enable-loadable-sqlite-extensions \
             --with-openssl=/system \
             --with-openssl-rpath=auto \
