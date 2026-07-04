@@ -131,7 +131,7 @@ jobs:
             ac_cv_working_tzset=yes \
             ac_cv_header_sys_xattr_h=no \
             ac_cv_func_getgrent=yes \
-            ac_cv_func_getpwent=no || { tail -n 100 config.log; exit 1; }
+            ac_cv_func_getpwent=no || { cat config.log; exit 1; }
 
           make -j$(nproc) || { tail -n 100 config.log; exit 1; }
           make install
