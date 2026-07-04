@@ -1,10 +1,14 @@
 version: 2
+# This must be at the top level, not inside 'updates'
+insecure-external-code-execution: deny
+
 updates:
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
-      interval: "weekly"
-    insecure-external-code-execution: deny
+      interval: "daily"
+    # Dependabot will automatically maintain SHA pins if you use them in your workflow
+    commit-message:
+      prefix: "actions"
 
-# Keep GitHub Actions pinned to commit SHAs
 registries: {}
