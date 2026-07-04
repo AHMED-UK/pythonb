@@ -1,14 +1,8 @@
 version: 2
-# This must be at the top level, not inside 'updates'
-insecure-external-code-execution: deny
-
 updates:
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
       interval: "daily"
-    # Dependabot will automatically maintain SHA pins if you use them in your workflow
     commit-message:
-      prefix: "actions"
-
-registries: {}
+      prefix: "actions(ci): "
