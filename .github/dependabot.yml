@@ -1,0 +1,10 @@
+version: 2
+updates:
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    insecure-external-code-execution: deny
+
+# Keep GitHub Actions pinned to commit SHAs
+registries: {}
