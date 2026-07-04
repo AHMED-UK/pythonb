@@ -200,4 +200,4 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: python-${{ github.event.inputs.py_version }}-android-${{ matrix.arch }}
-          path: python-${{ github.event.inputs.py_version }}-android-${{ matrix.arch }}.tar.gz
+          path: python-${{ github.event.inputs.py_version }}-android-${{ matrix.arch }}.tar.xz
