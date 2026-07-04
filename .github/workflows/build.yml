@@ -12,6 +12,10 @@ on:
         required: true
         default: 'https://github.com/zrsx/cpython3/releases/download/v3.13.14/Python-3.13.14.tar.xz'
 
+permissions:
+  contents: read
+  actions: read
+
 env:
   # Force the GitHub Actions Runner to use Node 26 to bypass deprecation warnings for actions
   ACTIONS_RUNNER_FORCED_NODE_VERSION: "node26"
