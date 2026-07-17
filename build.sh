@@ -37,7 +37,9 @@ TERMUX_DEPS=(
 
 WORKDIR="${WORKDIR:-$(pwd)/work-${TERMUX_ARCH}}"
 DOWNLOADS="${DOWNLOADS:-$(pwd)/downloads}"
-NDK_HOME="${ANDROID_NDK_HOME:-$(pwd)/android-ndk-r${TERMUX_NDK_VERSION}}"
+# Deliberately NOT using $ANDROID_NDK_HOME: GitHub runners preinstall a
+# different NDK version. Termux pins r29, so we fetch exactly that.
+NDK_HOME="${TERMUX_NDK_HOME:-$(pwd)/android-ndk-r${TERMUX_NDK_VERSION}}"
 OUTPUT_DIR="${OUTPUT_DIR:-$(pwd)/output}"
 
 ##############################################################################
@@ -77,14 +79,21 @@ setup_ndk() {
 }
 
 ##############################################################################
-# 2. Build a sysroot from official termux .deb dependencies
+# 2. Build a deps prefix from official termux .deb dependencies
 ##############################################################################
 TOOLCHAIN="$NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64"
 SYSROOT="$TOOLCHAIN/sysroot"
+# Host-side tree where termux debs are unpacked. Mirrors the termux prefix:
+# headers/libs end up in $DEPS_PREFIX/include and $DEPS_PREFIX/lib.
+# We point -isystem/-L here instead of polluting the (often read-only) NDK.
+DEPS_ROOT=""   # set in setup_deps (depends on WORKDIR)
+DEPS_PREFIX=""
 
 setup_deps() {
 	echo "[*] Fetching termux dependency debs for $TERMUX_DEB_ARCH..."
 	mkdir -p "$DOWNLOADS/debs-${TERMUX_ARCH}" "$WORKDIR/deps"
+	DEPS_ROOT="$WORKDIR/deps"
+	DEPS_PREFIX="$DEPS_ROOT${TERMUX_PREFIX}"
 
 	# Grab the Packages index to resolve exact .deb filenames.
 	local pkgindex="$DOWNLOADS/Packages-${TERMUX_ARCH}"
@@ -111,24 +120,24 @@ setup_deps() {
 			echo "    [+] $dep"
 			curl -fsL --retry 3 "${TERMUX_APT_URL}/${fname}" -o "$deb"
 		fi
-		# Extract data.tar.* into the deps prefix tree.
-		( cd "$WORKDIR/deps" && ar p "$deb" data.tar.xz 2>/dev/null | tar xJ 2>/dev/null ) || \
-		( cd "$WORKDIR/deps" && ar p "$deb" data.tar.gz 2>/dev/null | tar xz 2>/dev/null ) || true
+		# Extract data.tar.* into the deps tree ("--no-same-owner/-permissions"
+		# semantics: plain tar as non-root already avoids chown; use -m to skip
+		# mtime restore so this also works on picky filesystems).
+		local datatar
+		datatar=$(ar t "$deb" | grep '^data\.tar' | head -1)
+		case "$datatar" in
+			data.tar.xz)  ar p "$deb" data.tar.xz  | tar xJm -C "$DEPS_ROOT" ;;
+			data.tar.gz)  ar p "$deb" data.tar.gz  | tar xzm -C "$DEPS_ROOT" ;;
+			data.tar.zst) ar p "$deb" data.tar.zst | tar --zstd -xm -C "$DEPS_ROOT" ;;
+			*) echo "    [!] unknown data member '$datatar' in $deb"; exit 1 ;;
+		esac
 	done
 
-	# Termux debs unpack to ./data/data/com.termux/files/usr/{include,lib,...}.
-	# Copy headers + libs into the NDK sysroot so configure/link find them.
-	local dep_prefix="$WORKDIR/deps${TERMUX_PREFIX}"
-	if [ -d "$dep_prefix/include" ]; then
-		cp -a "$dep_prefix/include/." "$SYSROOT/usr/include/"
+	if [ ! -d "$DEPS_PREFIX/include" ] || [ ! -d "$DEPS_PREFIX/lib" ]; then
+		echo "[!] Dependency extraction failed: $DEPS_PREFIX/{include,lib} missing"
+		exit 1
 	fi
-	if [ -d "$dep_prefix/lib" ]; then
-		# Arch subdir the NDK expects for target libs.
-		local ndk_libdir="$SYSROOT/usr/lib/${TERMUX_HOST_PLATFORM}/${TERMUX_PKG_API_LEVEL}"
-		mkdir -p "$ndk_libdir"
-		cp -a "$dep_prefix/lib/." "$ndk_libdir/" 2>/dev/null || true
-		cp -a "$dep_prefix/lib/." "$SYSROOT/usr/lib/${TERMUX_HOST_PLATFORM}/" 2>/dev/null || true
-	fi
+	echo "    [ok] deps prefix at $DEPS_PREFIX"
 }
 
 ##############################################################################
@@ -170,7 +179,10 @@ setup_toolchain_env() {
 
 	export CFLAGS=""
 	export CPPFLAGS=""
-	export LDFLAGS="-L${SYSROOT}/usr/lib/${TERMUX_HOST_PLATFORM}/${TERMUX_PKG_API_LEVEL}"
+	# Link against the unpacked termux deps; runtime search path is the
+	# on-device termux lib dir (termux_setup_toolchain_29 lines 4, 34).
+	export LDFLAGS="-L${DEPS_PREFIX}/lib"
+	LDFLAGS+=" -Wl,-rpath=${TERMUX_PREFIX}/lib"
 
 	# Arch-specific flags (termux_setup_toolchain_29 lines 43-65)
 	case "$TERMUX_ARCH" in
@@ -196,7 +208,9 @@ setup_toolchain_env() {
 	CFLAGS+=" -Oz"
 
 	export CXXFLAGS="$CFLAGS"
-	export CPPFLAGS+=" -isystem${SYSROOT}/usr/include"
+	# Header include order: termux prefix (deps) first, then NDK sysroot
+	# comes implicitly from the clang wrapper.
+	export CPPFLAGS+=" -isystem${DEPS_PREFIX}/include"
 
 	# python build.sh: libandroid-support is a dependency, link explicitly.
 	LDFLAGS+=" -Wl,--no-as-needed,-landroid-support,--as-needed"
@@ -209,11 +223,13 @@ python_configure_args() {
 	# termux python build.sh: -O3 instead of -Oz for python itself.
 	CFLAGS="${CFLAGS/-Oz/-O3}"
 	# setup.py only probes gcc include paths; make zlib etc. discoverable.
+	# (termux adds the standalone-toolchain sysroot; the stock NDK equivalent
+	# is usr/include plus the per-triple lib dirs.)
 	CPPFLAGS+=" -I${SYSROOT}/usr/include"
 	# Keep symbols in libpython3.so.
 	LDFLAGS="${LDFLAGS/-Wl,--as-needed/}"
-	LDFLAGS+=" -L${SYSROOT}/usr/lib"
-	if [ "$TERMUX_ARCH" = "x86_64" ]; then LDFLAGS+="64"; fi
+	LDFLAGS+=" -L${SYSROOT}/usr/lib/${TERMUX_HOST_PLATFORM}/${TERMUX_PKG_API_LEVEL}"
+	LDFLAGS+=" -L${SYSROOT}/usr/lib/${TERMUX_HOST_PLATFORM}"
 	# multiprocessing posix semaphore lib.
 	LDFLAGS+=" -landroid-posix-semaphore"
 	export LIBCRYPT_LIBS="-lcrypt"
