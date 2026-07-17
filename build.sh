@@ -343,6 +343,7 @@ python_configure_args() {
 		"ac_cv_func_linkat=no"
 		"ac_cv_buggy_getaddrinfo=no"
 		"--enable-loadable-sqlite-extensions"
+		"--disable-test-modules"
 		"ac_cv_little_endian_double=yes"
 		"ac_cv_posix_semaphores_enabled=yes"
 		"ac_cv_func_sem_open=yes"
