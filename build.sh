@@ -31,7 +31,7 @@ TERMUX_APT_URL="https://packages-cf.termux.dev/apt/termux-main"
 # Runtime + build libs that python links against. Names match termux-main .debs.
 TERMUX_DEPS=(
 	gdbm libandroid-posix-semaphore libandroid-support libbz2 libcrypt
-	libexpat libffi liblzma libsqlite ncurses ncurses-ui-libs openssl
+	libexpat libffi liblzma libsqlite libuuid ncurses ncurses-ui-libs openssl
 	readline zlib zstd
 )
 
