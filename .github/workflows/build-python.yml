@@ -1,0 +1,104 @@
+name: Build Python (Termux)
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Tag to create/attach the release to (e.g. v3.13.14-termux)"
+        required: true
+        default: "v3.13.14-termux"
+
+# Needed to create the GitHub Release and upload assets on this repo (your fork).
+permissions:
+  contents: write
+
+concurrency:
+  group: build-python-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        target_arch: [aarch64, arm, i686, x86_64]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install host build tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential curl unzip xz-utils binutils \
+            pkg-config python3 file ca-certificates
+
+      - name: Cache NDK
+        uses: actions/cache@v4
+        with:
+          path: android-ndk-r29
+          key: ndk-r29-${{ runner.os }}
+
+      - name: Cache downloads
+        uses: actions/cache@v4
+        with:
+          path: downloads
+          key: downloads-${{ matrix.target_arch }}-${{ hashFiles('build.sh') }}
+
+      - name: Build Python
+        env:
+          TERMUX_ARCH: ${{ matrix.target_arch }}
+        run: |
+          chmod +x ./build.sh
+          ./build.sh
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: python-${{ matrix.target_arch }}
+          path: |
+            output/*.tar.xz
+            output/*.sha256
+          if-no-files-found: error
+
+  release:
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: List collected files
+        run: find dist -type f | sort
+
+      - name: Resolve release tag
+        id: tag
+        run: |
+          if [ "${{ github.event_name }}" = "push" ]; then
+            echo "tag=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=${{ github.event.inputs.release_tag }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.tag.outputs.tag }}
+          name: Python for Termux ${{ steps.tag.outputs.tag }}
+          body: |
+            CPython cross-compiled for Termux with the same toolchain and
+            configure flags as termux-packages (NDK r29, API 24).
+            Source: pre-patched tarball from zrsx/cpython3.
+          files: |
+            dist/*.tar.xz
+            dist/*.sha256
+          fail_on_unmatched_files: true
