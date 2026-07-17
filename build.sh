@@ -41,6 +41,9 @@ DOWNLOADS="${DOWNLOADS:-$(pwd)/downloads}"
 # different NDK version. Termux pins r29, so we fetch exactly that.
 NDK_HOME="${TERMUX_NDK_HOME:-$(pwd)/android-ndk-r${TERMUX_NDK_VERSION}}"
 OUTPUT_DIR="${OUTPUT_DIR:-$(pwd)/output}"
+# Vendored copy of termux-packages' ndk-patches/ (sysroot header fixes).
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+NDK_PATCHES_DIR="$SCRIPT_DIR/ndk-patches"
 
 ##############################################################################
 # Arch-specific variables (mirrors termux_step_setup_arch_variables)
@@ -76,6 +79,42 @@ setup_ndk() {
 			"https://dl.google.com/android/repository/android-ndk-r${TERMUX_NDK_VERSION}-linux.zip"
 	fi
 	unzip -q "$ndk_zip" -d "$(dirname "$NDK_HOME")"
+}
+
+##############################################################################
+# 1b. Patch the NDK sysroot headers the way termux does
+#     (termux_setup_toolchain_29.sh lines 199-226). Without this, bionic's
+#     headers contradict the forced ac_cv_* configure answers — e.g. grp.h
+#     lacks the getgrent() stub that ac_cv_func_getgrent=yes relies on.
+##############################################################################
+patch_ndk_sysroot() {
+	local sysroot="$NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/sysroot"
+	local marker="$sysroot/.termux-ndk-patches-applied"
+	if [ -f "$marker" ]; then
+		echo "[*] NDK sysroot already patched (marker present)"
+		return
+	fi
+	echo "[*] Applying termux ndk-patches to sysroot..."
+	local termux_home="/data/data/com.termux/files/home"
+	cd "$sysroot"
+	for f in "$NDK_PATCHES_DIR/${TERMUX_NDK_VERSION}"/*.patch; do
+		echo "    [+] $(basename "$f")"
+		sed "s%\@TERMUX_PREFIX\@%${TERMUX_PREFIX}%g" "$f" | \
+			sed "s%\@TERMUX_HOME\@%${termux_home}%g" | \
+			patch --silent -p1
+	done
+	# libintl.h: inline gettext functions. langinfo.h: inline nl_langinfo().
+	cp "$NDK_PATCHES_DIR"/{libintl.h,langinfo.h} usr/include
+
+	# Remove headers termux removes: their functionality comes from termux
+	# packages (zlib, libiconv, libandroid-glob...) or does not really exist
+	# at API 24 (spawn.h). Leaving e.g. zlib.h/spawn.h in place makes
+	# configure detect the wrong things.
+	rm -f usr/include/{sys/{capability,shm,sem},{glob,iconv,spawn,zlib,zconf},KHR/khrplatform,execinfo}.h
+	rm -rf usr/include/vulkan usr/include/{EGL,GLES,GLES2,GLES3}
+
+	touch "$marker"
+	cd - >/dev/null
 }
 
 ##############################################################################
@@ -318,6 +357,7 @@ build_python() {
 ##############################################################################
 main() {
 	setup_ndk
+	patch_ndk_sysroot
 	setup_source
 	setup_deps
 	setup_toolchain_env
