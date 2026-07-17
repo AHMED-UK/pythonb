@@ -34,8 +34,13 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            build-essential curl unzip xz-utils binutils \
-            pkg-config python3 file ca-certificates
+            build-essential curl unzip xz-utils zstd binutils \
+            pkg-config file ca-certificates software-properties-common
+          # Cross-compiling CPython needs a host python of the SAME
+          # major.minor version for --with-build-python.
+          sudo add-apt-repository -y ppa:deadsnakes/ppa
+          sudo apt-get install -y --no-install-recommends python3.13 python3.13-venv
+          python3.13 --version
 
       - name: Cache NDK
         uses: actions/cache@v4
