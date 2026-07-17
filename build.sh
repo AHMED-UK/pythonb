@@ -37,9 +37,14 @@ TERMUX_DEPS=(
 
 WORKDIR="${WORKDIR:-$(pwd)/work-${TERMUX_ARCH}}"
 DOWNLOADS="${DOWNLOADS:-$(pwd)/downloads}"
-# Deliberately NOT using $ANDROID_NDK_HOME: GitHub runners preinstall a
-# different NDK version. Termux pins r29, so we fetch exactly that.
-NDK_HOME="${TERMUX_NDK_HOME:-$(pwd)/android-ndk-r${TERMUX_NDK_VERSION}}"
+# NDK resolution order:
+#   1. $TERMUX_NDK_HOME (explicit override)
+#   2. $NDK — set by the excedrin/termux-builder image, which ships NDK r29
+#      at /home/builder/lib/android-ndk-r29
+#   3. download r29 into the workdir
+# Deliberately NOT $ANDROID_NDK_HOME: GitHub runners preinstall a different
+# NDK version and termux pins r29.
+NDK_HOME="${TERMUX_NDK_HOME:-${NDK:-$(pwd)/android-ndk-r${TERMUX_NDK_VERSION}}}"
 OUTPUT_DIR="${OUTPUT_DIR:-$(pwd)/output}"
 # Vendored copy of termux-packages' ndk-patches/ (sysroot header fixes).
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -177,6 +182,52 @@ setup_deps() {
 		exit 1
 	fi
 	echo "    [ok] deps prefix at $DEPS_PREFIX"
+}
+
+##############################################################################
+# 2b. Host "build python" — cross-compiling CPython requires a host python
+#     of the same major.minor for --with-build-python. Replicates
+#     termux_setup_build_python: minimal host build of the UPSTREAM tarball.
+##############################################################################
+BUILD_PYTHON_DIR="${BUILD_PYTHON_DIR:-$(pwd)/build-python-${PYTHON_VERSION}}"
+UPSTREAM_SRC_URL="https://www.python.org/ftp/python/${PYTHON_VERSION}/Python-${PYTHON_VERSION}.tar.xz"
+UPSTREAM_SRC_SHA256="639e43243c620a308f968213df9e00f2f8f62332f7adbaa7a7eeb9783057c690"
+
+setup_build_python() {
+	if command -v "python${_MAJOR_VERSION}" >/dev/null 2>&1; then
+		echo "[*] Host python${_MAJOR_VERSION} found: $(command -v python${_MAJOR_VERSION})"
+		return
+	fi
+	local prefix="$BUILD_PYTHON_DIR/host-build-prefix"
+	if [ ! -x "$prefix/bin/python${_MAJOR_VERSION}" ]; then
+		echo "[*] Host-building minimal Python ${PYTHON_VERSION} for --with-build-python..."
+		local tarball="$DOWNLOADS/Python-${PYTHON_VERSION}-upstream.tar.xz"
+		mkdir -p "$DOWNLOADS"
+		if [ ! -f "$tarball" ]; then
+			curl -fL --retry 3 -o "$tarball" "$UPSTREAM_SRC_URL"
+		fi
+		echo "${UPSTREAM_SRC_SHA256}  ${tarball}" | sha256sum -c -
+		rm -rf "$BUILD_PYTHON_DIR/src"
+		mkdir -p "$BUILD_PYTHON_DIR/src"
+		tar xf "$tarball" -C "$BUILD_PYTHON_DIR/src" --strip-components=1
+		# Minimal host build, like termux_setup_build_python: clean env so
+		# the android cross vars set later can never leak in.
+		(
+			cd "$BUILD_PYTHON_DIR/src"
+			mkdir -p host-build
+			cd host-build
+			env -i PATH="/usr/local/bin:/usr/bin:/bin" \
+				LDFLAGS="-Wl,-rpath=$prefix/lib" \
+				../configure \
+					--with-ensurepip=install \
+					--enable-shared \
+					--prefix="$prefix"
+			env -i PATH="/usr/local/bin:/usr/bin:/bin" \
+				make -j "$(nproc)" install
+		)
+	fi
+	export PATH="$prefix/bin:$PATH"
+	"python${_MAJOR_VERSION}" --version
 }
 
 ##############################################################################
@@ -358,6 +409,7 @@ build_python() {
 main() {
 	setup_ndk
 	patch_ndk_sysroot
+	setup_build_python
 	setup_source
 	setup_deps
 	setup_toolchain_env
