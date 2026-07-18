@@ -382,6 +382,12 @@ python_configure_args() {
 	LDFLAGS+=" -landroid-posix-semaphore"
 	export LIBCRYPT_LIBS="-lcrypt"
 
+	# ThinLTO: cache backend compilations so incremental relinks are cheap.
+	# (--with-lto=thin below adds -flto=thin itself via *_NODIST flags;
+	# lld runs the LTO backends in parallel across all cores by default.)
+	mkdir -p "$WORKDIR/thinlto-cache"
+	LDFLAGS+=" -Wl,--thinlto-cache-dir=$WORKDIR/thinlto-cache"
+
 	export CFLAGS CXXFLAGS CPPFLAGS LDFLAGS
 
 	# Exactly the configure args from packages/python/build.sh.
@@ -400,6 +406,10 @@ python_configure_args() {
 		# setup_mpdec (static-only), mirroring termux-builder's
 		# scripts/setup-mpdec.sh.
 		"--with-system-libmpdec"
+		# ThinLTO for python/libpython (clang + ld.lld + llvm-ar/ranlib are
+		# already in use, which is exactly what configure's LTO check needs).
+		# libmpdec.a stays non-LTO object code; lld links mixed inputs fine.
+		"--with-lto=thin"
 		"--without-ensurepip"
 		"ac_cv_func_link=no"
 		"ac_cv_func_linkat=no"
