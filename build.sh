@@ -461,9 +461,56 @@ build_python() {
 		fi
 	done
 
+	build_deb
+}
+
+##############################################################################
+# 6a. Assemble a Termux .deb from the DESTDIR install tree.
+#     A Debian package is an `ar` archive of three members, in order:
+#       debian-binary, control.tar.xz, data.tar.xz
+#     Termux installs debs with dpkg, so the data tree must be rooted at "."
+#     with paths under the termux prefix (which DESTDIR already gives us).
+##############################################################################
+# Runtime dependencies python links against (libmpdec is static, so omitted).
+DEB_DEPENDS="gdbm, libandroid-posix-semaphore, libandroid-support, libbz2, libcrypt, libexpat, libffi, liblzma, libsqlite, libuuid, ncurses, openssl, readline, zlib, libzstd"
+DEB_MAINTAINER="${DEB_MAINTAINER:-Termux <root@localhost>}"
+
+build_deb() {
+	local install_root="$WORKDIR/install"
+	local pkgroot="$WORKDIR/deb"
+	rm -rf "$pkgroot"
+	mkdir -p "$pkgroot"
+
+	# Installed-Size is in KiB (Debian convention).
+	local installed_size
+	installed_size=$(du -sk "$install_root" | cut -f1)
+
+	# control.tar.xz — DEBIAN/control describing the package.
+	mkdir -p "$pkgroot/control"
+	cat > "$pkgroot/control/control" <<EOF
+Package: python
+Version: ${PYTHON_VERSION}
+Architecture: ${TERMUX_DEB_ARCH}
+Maintainer: ${DEB_MAINTAINER}
+Installed-Size: ${installed_size}
+Depends: ${DEB_DEPENDS}
+Homepage: https://www.python.org/
+Description: Python programming language (CPython ${PYTHON_VERSION}) for Termux
+ Cross-compiled with the same toolchain and configure flags as
+ termux-packages (NDK r${TERMUX_NDK_VERSION}, API ${TERMUX_PKG_API_LEVEL}).
+EOF
+	tar cJf "$pkgroot/control.tar.xz" -C "$pkgroot/control" .
+
+	# data.tar.xz — the file tree, paths relative to "/".
+	tar cJf "$pkgroot/data.tar.xz" -C "$install_root" .
+
+	# debian-binary — format version.
+	echo "2.0" > "$pkgroot/debian-binary"
+
 	mkdir -p "$OUTPUT_DIR"
-	local outname="python-${PYTHON_VERSION}-termux-${TERMUX_ARCH}.tar.xz"
-	tar cJf "$OUTPUT_DIR/$outname" -C "$WORKDIR/install" .
+	local outname="python_${PYTHON_VERSION}_${TERMUX_DEB_ARCH}.deb"
+	# Order matters: debian-binary must be the first ar member.
+	( cd "$pkgroot" && ar rc "$OUTPUT_DIR/$outname" debian-binary control.tar.xz data.tar.xz )
 	( cd "$OUTPUT_DIR" && sha256sum "$outname" > "${outname}.sha256" )
 	echo "[*] Wrote $OUTPUT_DIR/$outname"
 }

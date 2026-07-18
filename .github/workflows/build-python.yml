@@ -65,7 +65,7 @@ jobs:
         with:
           name: python-${{ matrix.target_arch }}
           path: |
-            output/*.tar.xz
+            output/*.deb
             output/*.sha256
           if-no-files-found: error
 
@@ -103,6 +103,6 @@ jobs:
             configure flags as termux-packages (NDK r29, API 24).
             Source: pre-patched tarball from zrsx/cpython3.
           files: |
-            dist/*.tar.xz
+            dist/*.deb
             dist/*.sha256
           fail_on_unmatched_files: true
