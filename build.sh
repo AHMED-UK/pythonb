@@ -37,14 +37,15 @@ TERMUX_DEPS=(
 
 WORKDIR="${WORKDIR:-$(pwd)/work-${TERMUX_ARCH}}"
 DOWNLOADS="${DOWNLOADS:-$(pwd)/downloads}"
-# NDK resolution order:
+# NDK resolution order (no download — termux-builder ships NDK r29 already):
 #   1. $TERMUX_NDK_HOME (explicit override)
-#   2. $NDK — set by the excedrin/termux-builder image, which ships NDK r29
-#      at /home/builder/lib/android-ndk-r29
-#   3. download r29 into the workdir
+#   2. $NDK — set by termux-builder (scripts/properties.sh); the Dockerfile
+#      exports NDK=/home/builder/lib/android-ndk-r29
+#   3. termux-builder's default install path ${HOME}/lib/android-ndk-r29
+#      (scripts/properties.sh: NDK="${HOME}/lib/android-ndk-r${TERMUX_NDK_VERSION}")
 # Deliberately NOT $ANDROID_NDK_HOME: GitHub runners preinstall a different
 # NDK version and termux pins r29.
-NDK_HOME="${TERMUX_NDK_HOME:-${NDK:-$(pwd)/android-ndk-r${TERMUX_NDK_VERSION}}}"
+NDK_HOME="${TERMUX_NDK_HOME:-${NDK:-${HOME}/lib/android-ndk-r${TERMUX_NDK_VERSION}}}"
 OUTPUT_DIR="${OUTPUT_DIR:-$(pwd)/output}"
 # Vendored copy of termux-packages' ndk-patches/ (sysroot header fixes).
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -69,21 +70,16 @@ else
 fi
 
 ##############################################################################
-# 1. Fetch NDK
+# 1. Locate NDK (pre-installed by termux-builder — no download)
 ##############################################################################
 setup_ndk() {
-	if [ -d "$NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64" ]; then
-		echo "[*] Using existing NDK at $NDK_HOME"
-		return
+	if [ ! -d "$NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64" ]; then
+		echo "[!] NDK r${TERMUX_NDK_VERSION} not found at $NDK_HOME"
+		echo "    termux-builder installs it via scripts/setup-android-sdk.sh;"
+		echo "    otherwise set TERMUX_NDK_HOME or NDK to an existing NDK r${TERMUX_NDK_VERSION}."
+		exit 1
 	fi
-	echo "[*] Downloading Android NDK r${TERMUX_NDK_VERSION}..."
-	local ndk_zip="$DOWNLOADS/android-ndk-r${TERMUX_NDK_VERSION}-linux.zip"
-	mkdir -p "$DOWNLOADS"
-	if [ ! -f "$ndk_zip" ]; then
-		curl -fL --retry 3 -o "$ndk_zip" \
-			"https://dl.google.com/android/repository/android-ndk-r${TERMUX_NDK_VERSION}-linux.zip"
-	fi
-	unzip -q "$ndk_zip" -d "$(dirname "$NDK_HOME")"
+	echo "[*] Using NDK at $NDK_HOME"
 }
 
 ##############################################################################
@@ -99,7 +95,7 @@ patch_ndk_sysroot() {
 		echo "[*] NDK sysroot already patched (marker present)"
 		return
 	fi
-	echo "[*] Applying termux ndk-patches to sysroot..."
+	echo "[*] Applying termux ndk-patches to sysroot at $sysroot..."
 	local termux_home="/data/data/com.termux/files/home"
 	cd "$sysroot"
 	for f in "$NDK_PATCHES_DIR/${TERMUX_NDK_VERSION}"/*.patch; do
@@ -185,6 +181,55 @@ setup_deps() {
 }
 
 ##############################################################################
+# 2a. Cross-compile libmpdec for the target arch (--with-system-libmpdec).
+#     Same version/recipe as termux-builder's scripts/setup-mpdec.sh, which
+#     only builds aarch64 into the shared NDK sysroot; we build per-arch and
+#     install into the deps prefix so all four arches get a matching library.
+##############################################################################
+MPDEC_VERSION="4.0.1"
+MPDEC_SHA256="96d33abb4bb0070c7be0fed4246cd38416188325f820468214471938545b1ac8"
+MPDEC_URL="https://www.bytereef.org/software/mpdecimal/releases/mpdecimal-${MPDEC_VERSION}.tar.gz"
+
+setup_mpdec() {
+	local tarball="$DOWNLOADS/mpdecimal-${MPDEC_VERSION}.tar.gz"
+	mkdir -p "$DOWNLOADS"
+	if [ ! -f "$tarball" ]; then
+		echo "[*] Downloading mpdecimal ${MPDEC_VERSION}..."
+		curl -fL --retry 3 -o "$tarball" "$MPDEC_URL"
+	fi
+	echo "${MPDEC_SHA256}  ${tarball}" | sha256sum -c -
+	rm -rf "$WORKDIR/mpdecimal"
+	mkdir -p "$WORKDIR/mpdecimal"
+	tar xzf "$tarball" -C "$WORKDIR/mpdecimal" --strip-components=1
+
+	echo "[*] Building libmpdec ${MPDEC_VERSION} for ${CLANG_TRIPLE}..."
+	(
+		cd "$WORKDIR/mpdecimal"
+		export CC="$TOOLCHAIN/bin/${CLANG_TRIPLE}-clang"
+		export CXX="$TOOLCHAIN/bin/${CLANG_TRIPLE}-clang++"
+		export AR="$TOOLCHAIN/bin/llvm-ar"
+		export RANLIB="$TOOLCHAIN/bin/llvm-ranlib"
+		export STRIP="$TOOLCHAIN/bin/llvm-strip"
+		# -fPIC so the static archive can be linked into _decimal*.so.
+		export CFLAGS="-fPIC -O2"
+		./configure --host="${TERMUX_HOST_PLATFORM}" --prefix="$DEPS_PREFIX"
+		make -j"$(nproc)"
+		make install
+	)
+
+	# Keep only the static library: the python tarball does not ship
+	# libmpdec.so and no termux package provides it, so _decimal must link
+	# libmpdec statically. Dropping the .so also shadows the aarch64-only
+	# shared copy setup-mpdec.sh put in the NDK sysroot (-L deps wins).
+	rm -f "$DEPS_PREFIX"/lib/libmpdec*.so*
+	if [ ! -f "$DEPS_PREFIX/lib/libmpdec.a" ]; then
+		echo "[!] libmpdec build failed: $DEPS_PREFIX/lib/libmpdec.a missing"
+		exit 1
+	fi
+	echo "    [ok] libmpdec.a at $DEPS_PREFIX/lib"
+}
+
+##############################################################################
 # 2b. Host "build python" — cross-compiling CPython requires a host python
 #     of the same major.minor for --with-build-python. Replicates
 #     termux_setup_build_python: minimal host build of the UPSTREAM tarball.
@@ -245,6 +290,12 @@ setup_source() {
 	rm -rf "$WORKDIR/src"
 	mkdir -p "$WORKDIR/src"
 	tar xf "$tarball" -C "$WORKDIR/src" --strip-components=1
+
+	# Build with C17 instead of the default C11. configure hard-codes the
+	# standard in the generated script and its source; patch both so a
+	# stray reconfigure keeps the change.
+	echo "[*] Switching C standard c11 -> c17 in configure/configure.ac..."
+	sed -i 's/-std=c11/-std=c17/g' "$WORKDIR/src/configure" "$WORKDIR/src/configure.ac"
 }
 
 ##############################################################################
@@ -304,6 +355,13 @@ setup_toolchain_env() {
 
 	# python build.sh: libandroid-support is a dependency, link explicitly.
 	LDFLAGS+=" -Wl,--no-as-needed,-landroid-support,--as-needed"
+
+	# CPython 3.13 detects _zstd only via pkg-config (PKG_CHECK_MODULES).
+	# The termux .pc files carry prefix=$TERMUX_PREFIX (the on-device path),
+	# so point pkg-config at the deps pkgconfig dir and use SYSROOT_DIR to
+	# rebase those prefixes into the extracted deps tree.
+	export PKG_CONFIG_LIBDIR="${DEPS_PREFIX}/lib/pkgconfig:${DEPS_PREFIX}/share/pkgconfig"
+	export PKG_CONFIG_SYSROOT_DIR="${DEPS_ROOT}"
 }
 
 ##############################################################################
@@ -338,6 +396,10 @@ python_configure_args() {
 		"--prefix=${TERMUX_PREFIX}"
 		"--with-system-ffi"
 		"--with-system-expat"
+		# libmpdec is cross-compiled per-arch into the deps prefix by
+		# setup_mpdec (static-only), mirroring termux-builder's
+		# scripts/setup-mpdec.sh.
+		"--with-system-libmpdec"
 		"--without-ensurepip"
 		"ac_cv_func_link=no"
 		"ac_cv_func_linkat=no"
@@ -391,7 +453,7 @@ build_python() {
 
 	# Verify the important extension modules were built (termux post_massage check).
 	local dynload="$WORKDIR/install${TERMUX_PREFIX}/lib/python${_MAJOR_VERSION}/lib-dynload"
-	for module in _bz2 _curses _lzma _multiprocessing _sqlite3 _ssl zlib _zstd; do
+	for module in _bz2 _curses _decimal _lzma _multiprocessing _sqlite3 _ssl zlib _zstd; do
 		if ! ls "${dynload}/${module}".*.so >/dev/null 2>&1; then
 			echo "[!] WARNING: python module '$module' was not built"
 		else
@@ -413,6 +475,7 @@ main() {
 	setup_build_python
 	setup_source
 	setup_deps
+	setup_mpdec
 	setup_toolchain_env
 	python_configure_args
 	build_python
