@@ -261,8 +261,10 @@ setup_libxcrypt() {
 		export CFLAGS="-fPIC -O2"
 		# Obsolete glibc-compat APIs need symbol versioning; not useful on
 		# bionic, and python only needs crypt()/crypt_r().
+		# --disable-werror: libxcrypt builds with -Werror by default, and
+		# newer NDK clang emits warnings its warning set was not tuned for.
 		./configure --host="${TERMUX_HOST_PLATFORM}" --prefix="$DEPS_PREFIX" \
-			--disable-obsolete-api --disable-failure-tokens
+			--disable-obsolete-api --disable-failure-tokens --disable-werror
 		make -j"$(nproc)"
 		make install
 	)
