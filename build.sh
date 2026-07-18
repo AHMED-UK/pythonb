@@ -472,7 +472,7 @@ build_python() {
 #     with paths under the termux prefix (which DESTDIR already gives us).
 ##############################################################################
 # Runtime dependencies python links against (libmpdec is static, so omitted).
-DEB_DEPENDS="gdbm, libandroid-posix-semaphore, libandroid-support, libbz2, libcrypt, libexpat, libffi, liblzma, libsqlite, libuuid, ncurses, openssl, readline, zlib, libzstd"
+DEB_DEPENDS="gdbm, libandroid-posix-semaphore, libandroid-support, libbz2, libcrypt, libexpat, libffi, liblzma, libsqlite, libuuid, ncurses, openssl, readline, zlib, zstd"
 DEB_MAINTAINER="${DEB_MAINTAINER:-Termux <root@localhost>}"
 
 build_deb() {
