@@ -488,7 +488,7 @@ build_deb() {
 	# control.tar.xz — DEBIAN/control describing the package.
 	mkdir -p "$pkgroot/control"
 	cat > "$pkgroot/control/control" <<EOF
-Package: python
+Package: python3.13
 Version: ${PYTHON_VERSION}
 Architecture: ${TERMUX_DEB_ARCH}
 Maintainer: ${DEB_MAINTAINER}
