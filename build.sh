@@ -30,7 +30,7 @@ TERMUX_ARCH="${TERMUX_ARCH:-aarch64}"
 TERMUX_APT_URL="https://packages-cf.termux.dev/apt/termux-main"
 # Runtime + build libs that python links against. Names match termux-main .debs.
 TERMUX_DEPS=(
-	gdbm libandroid-posix-semaphore libandroid-support libbz2 libcrypt
+	gdbm libandroid-posix-semaphore libandroid-support libbz2
 	libexpat libffi liblzma libsqlite libuuid ncurses ncurses-ui-libs openssl
 	readline zlib zstd
 )
@@ -227,6 +227,54 @@ setup_mpdec() {
 		exit 1
 	fi
 	echo "    [ok] libmpdec.a at $DEPS_PREFIX/lib"
+}
+
+##############################################################################
+# 2a2. Cross-compile libxcrypt for the target arch (provides crypt(3) for
+#      the _crypt module / LIBCRYPT_LIBS). Built per-arch into the deps
+#      prefix, same pattern as libmpdec, replacing the termux libcrypt dep.
+##############################################################################
+LIBXCRYPT_VERSION="4.5.2"
+LIBXCRYPT_SHA256="71513a31c01a428bccd5367a32fd95f115d6dac50fb5b60c779d5c7942aec071"
+LIBXCRYPT_URL="https://github.com/besser82/libxcrypt/releases/download/v${LIBXCRYPT_VERSION}/libxcrypt-${LIBXCRYPT_VERSION}.tar.xz"
+
+setup_libxcrypt() {
+	local tarball="$DOWNLOADS/libxcrypt-${LIBXCRYPT_VERSION}.tar.xz"
+	mkdir -p "$DOWNLOADS"
+	if [ ! -f "$tarball" ]; then
+		echo "[*] Downloading libxcrypt ${LIBXCRYPT_VERSION}..."
+		curl -fL --retry 3 -o "$tarball" "$LIBXCRYPT_URL"
+	fi
+	echo "${LIBXCRYPT_SHA256}  ${tarball}" | sha256sum -c -
+	rm -rf "$WORKDIR/libxcrypt"
+	mkdir -p "$WORKDIR/libxcrypt"
+	tar xJf "$tarball" -C "$WORKDIR/libxcrypt" --strip-components=1
+
+	echo "[*] Building libxcrypt ${LIBXCRYPT_VERSION} for ${CLANG_TRIPLE}..."
+	(
+		cd "$WORKDIR/libxcrypt"
+		export CC="$TOOLCHAIN/bin/${CLANG_TRIPLE}-clang"
+		export AR="$TOOLCHAIN/bin/llvm-ar"
+		export RANLIB="$TOOLCHAIN/bin/llvm-ranlib"
+		export STRIP="$TOOLCHAIN/bin/llvm-strip"
+		# -fPIC so the static archive can be linked into _crypt*.so.
+		export CFLAGS="-fPIC -O2"
+		# Obsolete glibc-compat APIs need symbol versioning; not useful on
+		# bionic, and python only needs crypt()/crypt_r().
+		./configure --host="${TERMUX_HOST_PLATFORM}" --prefix="$DEPS_PREFIX" \
+			--disable-obsolete-api --disable-failure-tokens
+		make -j"$(nproc)"
+		make install
+	)
+
+	# Keep only the static library, like libmpdec: linking libcrypt statically
+	# drops the runtime dependency on a crypt provider package.
+	rm -f "$DEPS_PREFIX"/lib/libcrypt*.so* "$DEPS_PREFIX"/lib/libxcrypt*.so*
+	if [ ! -f "$DEPS_PREFIX/lib/libcrypt.a" ]; then
+		echo "[!] libxcrypt build failed: $DEPS_PREFIX/lib/libcrypt.a missing"
+		exit 1
+	fi
+	echo "    [ok] libcrypt.a at $DEPS_PREFIX/lib"
 }
 
 ##############################################################################
@@ -481,8 +529,9 @@ build_python() {
 #     Termux installs debs with dpkg, so the data tree must be rooted at "."
 #     with paths under the termux prefix (which DESTDIR already gives us).
 ##############################################################################
-# Runtime dependencies python links against (libmpdec is static, so omitted).
-DEB_DEPENDS="gdbm, libandroid-posix-semaphore, libandroid-support, libbz2, libcrypt, libexpat, libffi, liblzma, libsqlite, libuuid, ncurses, openssl, readline, zlib, zstd"
+# Runtime dependencies python links against (libmpdec and libcrypt are
+# static, so omitted).
+DEB_DEPENDS="gdbm, libandroid-posix-semaphore, libandroid-support, libbz2, libexpat, libffi, liblzma, libsqlite, libuuid, ncurses, openssl, readline, zlib, zstd"
 DEB_MAINTAINER="${DEB_MAINTAINER:-Termux <root@localhost>}"
 
 build_deb() {
@@ -533,6 +582,7 @@ main() {
 	setup_source
 	setup_deps
 	setup_mpdec
+	setup_libxcrypt
 	setup_toolchain_env
 	python_configure_args
 	build_python
