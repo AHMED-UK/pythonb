@@ -40,7 +40,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Cache downloads
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: downloads
           key: downloads-${{ matrix.target_arch }}-${{ hashFiles('build.sh') }}
@@ -48,7 +48,7 @@ jobs:
       # No python3.13 in the image; build.sh host-builds one for
       # --with-build-python. Cache it so that only happens once.
       - name: Cache host build-python
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: build-python-*/host-build-prefix
           key: build-python-3.13-${{ hashFiles('build.sh') }}
