@@ -16,15 +16,15 @@ set -euo pipefail
 ##############################################################################
 # Configuration matching termux-packages
 ##############################################################################
-PYTHON_VERSION="${PYTHON_VERSION:-3.13.14}"
+PYTHON_VERSION="${PYTHON_VERSION:-3.13.15}"
 _MAJOR_VERSION="${PYTHON_VERSION%.*}"                 # e.g. 3.13 or 3.14
 
 # Version table: pre-patched tarball + upstream source SHA256s.
 # Add a new stanza here when bumping or adding a Python version.
 case "$PYTHON_VERSION" in
-    3.13.14)
-        SRC_SHA256="188ba1dcd25510188a3cc8b40c7fcdd906cbd5b796bc7c1e3b94945f74aa9cbb"
-        UPSTREAM_SRC_SHA256="639e43243c620a308f968213df9e00f2f8f62332f7adbaa7a7eeb9783057c690"
+    3.13.15)
+        SRC_SHA256="5791f121f6c6e92420268a8be504156571cb1e1c74f0699a6b5c7e3216360255"
+        UPSTREAM_SRC_SHA256="1e66a7945a48390ee4c2a4268a0e4185884059a13c4aab6d148aa208deea4a76"
         ;;
     3.14.7)
         SRC_SHA256="ca072950774d284f5300c5db95b5e71b3dbb1693bf3ff98740a1550d97102e17"
@@ -474,6 +474,7 @@ python_configure_args() {
 		# setup_mpdec (static-only), mirroring termux-builder's
 		# scripts/setup-mpdec.sh.
 		"--with-system-libmpdec"
+		"--with-openssl=${DEPS_PREFIX}"
 		# ThinLTO for python/libpython (clang + ld.lld + llvm-ar/ranlib are
 		# already in use, which is exactly what configure's LTO check needs).
 		# libmpdec.a stays non-LTO object code; lld links mixed inputs fine.
