@@ -4,20 +4,38 @@
 # toolchain and configure flags used by termux-packages
 # (scripts/build/toolchain/termux_setup_toolchain_29.sh + packages/python/build.sh).
 #
-# The source tarball is pre-patched (termux patches already applied):
-#   https://github.com/zrsx/cpython3/releases/download/v3.13.14/Python-3.13.14.tar.xz
+# The source tarball is pre-patched (termux patches already applied) and is
+# fetched from the zrsx/cpython3 GitHub releases (see the version table below).
+# Override with PYTHON_VERSION=<ver> to select a different entry.
 #
 # Usage: TERMUX_ARCH=aarch64 ./build.sh
+# Usage: TERMUX_ARCH=aarch64 PYTHON_VERSION=3.14.7 ./build.sh
 #
 set -euo pipefail
 
 ##############################################################################
 # Configuration matching termux-packages
 ##############################################################################
-PYTHON_VERSION="3.13.14"
-_MAJOR_VERSION="${PYTHON_VERSION%.*}"                 # 3.13
+PYTHON_VERSION="${PYTHON_VERSION:-3.13.14}"
+_MAJOR_VERSION="${PYTHON_VERSION%.*}"                 # e.g. 3.13 or 3.14
+
+# Version table: pre-patched tarball + upstream source SHA256s.
+# Add a new stanza here when bumping or adding a Python version.
+case "$PYTHON_VERSION" in
+    3.13.14)
+        SRC_SHA256="188ba1dcd25510188a3cc8b40c7fcdd906cbd5b796bc7c1e3b94945f74aa9cbb"
+        UPSTREAM_SRC_SHA256="639e43243c620a308f968213df9e00f2f8f62332f7adbaa7a7eeb9783057c690"
+        ;;
+    3.14.7)
+        SRC_SHA256="ca072950774d284f5300c5db95b5e71b3dbb1693bf3ff98740a1550d97102e17"
+        UPSTREAM_SRC_SHA256="3b48dac8fb59f62eaa67ac83c1eb12bda1b7a08406dd286e252c11a66be27f81"
+        ;;
+    *)
+        echo "[!] Unknown PYTHON_VERSION='$PYTHON_VERSION'. Add it to the version table in build.sh."
+        exit 1 ;;
+esac
+
 SRC_URL="https://github.com/zrsx/cpython3/releases/download/v${PYTHON_VERSION}/Python-${PYTHON_VERSION}.tar.xz"
-SRC_SHA256="188ba1dcd25510188a3cc8b40c7fcdd906cbd5b796bc7c1e3b94945f74aa9cbb"
 
 # From scripts/properties.sh
 TERMUX_NDK_VERSION="29"                               # NDK r29
@@ -286,7 +304,7 @@ setup_libxcrypt() {
 ##############################################################################
 BUILD_PYTHON_DIR="${BUILD_PYTHON_DIR:-$(pwd)/build-python-${PYTHON_VERSION}}"
 UPSTREAM_SRC_URL="https://www.python.org/ftp/python/${PYTHON_VERSION}/Python-${PYTHON_VERSION}.tar.xz"
-UPSTREAM_SRC_SHA256="639e43243c620a308f968213df9e00f2f8f62332f7adbaa7a7eeb9783057c690"
+# UPSTREAM_SRC_SHA256 is set by the version table near the top of this file.
 
 setup_build_python() {
 	if command -v "python${_MAJOR_VERSION}" >/dev/null 2>&1; then
@@ -549,7 +567,7 @@ build_deb() {
 	# control.tar.xz — DEBIAN/control describing the package.
 	mkdir -p "$pkgroot/control"
 	cat > "$pkgroot/control/control" <<EOF
-Package: python3.13
+Package: python${_MAJOR_VERSION}
 Version: ${PYTHON_VERSION}
 Architecture: ${TERMUX_DEB_ARCH}
 Maintainer: ${DEB_MAINTAINER}
