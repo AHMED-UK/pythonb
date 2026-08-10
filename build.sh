@@ -48,8 +48,9 @@ TERMUX_ARCH="${TERMUX_ARCH:-aarch64}"
 TERMUX_APT_URL="https://packages-cf.termux.dev/apt/termux-main"
 # Runtime + build libs that python links against. Names match termux-main .debs.
 TERMUX_DEPS=(
+	aosp-libs aosp-utils ca-certificates
 	gdbm libandroid-posix-semaphore libandroid-support libbz2
-	libexpat libffi liblzma libsqlite libuuid ncurses ncurses-ui-libs openssl
+	libexpat libffi liblzma libsqlite libuuid ncurses ncurses-ui-libs openssl openssl-tool
 	readline zlib zstd
 )
 
@@ -448,6 +449,16 @@ python_configure_args() {
 	LDFLAGS+=" -L${SYSROOT}/usr/lib/${TERMUX_HOST_PLATFORM}"
 	# multiprocessing posix semaphore lib.
 	LDFLAGS+=" -landroid-posix-semaphore"
+	case "$TERMUX_ARCH" in
+	    arm|i686)
+	        LDFLAGS+=" -L${TERMUX_PREFIX}/opt/aosp/lib"
+	        ;;
+	    aarch64|x86_64)
+	        LDFLAGS+=" -L${TERMUX_PREFIX}/opt/aosp/lib64"
+	        ;;
+	esac
+	LDFLAGS+=" -lssl -lcrypto"
+	export LIBS=" -landroid-posix-semaphore"
 	export LIBCRYPT_LIBS="-lcrypt"
 
 	# ThinLTO: cache backend compilations so incremental relinks are cheap.
@@ -475,6 +486,7 @@ python_configure_args() {
 		# scripts/setup-mpdec.sh.
 		"--with-system-libmpdec"
 		"--with-openssl=${DEPS_PREFIX}"
+		"--with-openssl-rpath=auto"
 		# ThinLTO for python/libpython (clang + ld.lld + llvm-ar/ranlib are
 		# already in use, which is exactly what configure's LTO check needs).
 		# libmpdec.a stays non-LTO object code; lld links mixed inputs fine.
@@ -522,10 +534,11 @@ python_configure_args() {
 ##############################################################################
 build_python() {
 	cd "$WORKDIR/src"
+	find /__w/pythonb/pythonb -maxdepth 99 -name 'libcrypto*' -o -name 'libssl*'
 	echo "[*] Configuring for $TERMUX_ARCH ($TERMUX_HOST_PLATFORM), API $TERMUX_PKG_API_LEVEL"
 	echo "    CFLAGS=$CFLAGS"
 	echo "    LDFLAGS=$LDFLAGS"
-	./configure "${CONFIGURE_ARGS[@]}"
+	./configure "${CONFIGURE_ARGS[@]}" || { cat config.log; exit 1; }
 	make -j"$(nproc)"
 	rm -rf "$WORKDIR/install"
 	make install DESTDIR="$WORKDIR/install"
