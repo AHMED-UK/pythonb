@@ -442,7 +442,7 @@ python_configure_args() {
 	# setup.py only probes gcc include paths; make zlib etc. discoverable.
 	# (termux adds the standalone-toolchain sysroot; the stock NDK equivalent
 	# is usr/include plus the per-triple lib dirs.)
-	CPPFLAGS+=" -I${SYSROOT}/usr/include"
+	CPPFLAGS+=" -I${SYSROOT}/usr/include /__w/pythonb/pythonb/work-arm/deps/data/data/com.termux/files/usr/opt/aosp/include"
 	# Keep symbols in libpython3.so.
 	LDFLAGS="${LDFLAGS/-Wl,--as-needed/}"
 	LDFLAGS+=" -L${SYSROOT}/usr/lib/${TERMUX_HOST_PLATFORM}/${TERMUX_PKG_API_LEVEL}"
@@ -451,10 +451,10 @@ python_configure_args() {
 	LDFLAGS+=" -landroid-posix-semaphore"
 	case "$TERMUX_ARCH" in
 	    arm|i686)
-	        LDFLAGS+=" -L${TERMUX_PREFIX}/opt/aosp/lib"
+	        LDFLAGS+=" -L/__w/pythonb/pythonb/work-arm/deps/data/data/com.termux/files/usr/opt/aosp/lib"
 	        ;;
 	    aarch64|x86_64)
-	        LDFLAGS+=" -L${TERMUX_PREFIX}/opt/aosp/lib64"
+	        LDFLAGS+=" -L/__w/pythonb/pythonb/work-arm/deps/data/data/com.termux/files/usr/opt/aosp/lib64"
 	        # For aarch64/x86_64, also explicitly add lib path since OpenSSL may
 	        # be in the standard lib directory even on 64-bit Android.
 	        LDFLAGS+=" -L${DEPS_PREFIX}/lib64"
