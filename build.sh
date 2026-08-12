@@ -438,11 +438,11 @@ setup_toolchain_env() {
 ##############################################################################
 python_configure_args() {
 	# termux python build.sh: -O3 instead of -Oz for python itself.
-	CFLAGS="${CFLAGS/-Oz/-O3}"
+	CFLAGS="${CFLAGS/-Oz/-O3} -I/__w/pythonb/pythonb/work-arm/deps/data/data/com.termux/files/usr/opt/aosp/lib"
 	# setup.py only probes gcc include paths; make zlib etc. discoverable.
 	# (termux adds the standalone-toolchain sysroot; the stock NDK equivalent
 	# is usr/include plus the per-triple lib dirs.)
-	CPPFLAGS+=" -I${SYSROOT}/usr/include /__w/pythonb/pythonb/work-arm/deps/data/data/com.termux/files/usr/opt/aosp/include"
+	CPPFLAGS+=" -I${SYSROOT}/usr/include "
 	# Keep symbols in libpython3.so.
 	LDFLAGS="${LDFLAGS/-Wl,--as-needed/}"
 	LDFLAGS+=" -L${SYSROOT}/usr/lib/${TERMUX_HOST_PLATFORM}/${TERMUX_PKG_API_LEVEL}"
