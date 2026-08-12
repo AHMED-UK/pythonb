@@ -455,6 +455,9 @@ python_configure_args() {
 	        ;;
 	    aarch64|x86_64)
 	        LDFLAGS+=" -L${TERMUX_PREFIX}/opt/aosp/lib64"
+	        # For aarch64/x86_64, also explicitly add lib path since OpenSSL may
+	        # be in the standard lib directory even on 64-bit Android.
+	        LDFLAGS+=" -L${DEPS_PREFIX}/lib64"
 	        ;;
 	esac
 	LDFLAGS+=" -lssl -lcrypto"
