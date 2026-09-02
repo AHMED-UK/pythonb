@@ -438,7 +438,7 @@ setup_toolchain_env() {
 ##############################################################################
 python_configure_args() {
 	# termux python build.sh: -O3 instead of -Oz for python itself.
-	CFLAGS="${CFLAGS/-Oz/-O3} -I/__w/pythonb/pythonb/work-arm/deps/data/data/com.termux/files/usr/opt/aosp/lib"
+	CFLAGS="${CFLAGS/-Oz/-O3} -I$DEPS_PREFIX/include"
 	# setup.py only probes gcc include paths; make zlib etc. discoverable.
 	# (termux adds the standalone-toolchain sysroot; the stock NDK equivalent
 	# is usr/include plus the per-triple lib dirs.)
@@ -451,10 +451,9 @@ python_configure_args() {
 	LDFLAGS+=" -landroid-posix-semaphore"
 	case "$TERMUX_ARCH" in
 	    arm|i686)
-	        LDFLAGS+=" -L/__w/pythonb/pythonb/work-arm/deps/data/data/com.termux/files/usr/opt/aosp/lib"
+	        LDFLAGS+=" -L${DEPS_PREFIX}/lib"
 	        ;;
 	    aarch64|x86_64)
-	        LDFLAGS+=" -L/__w/pythonb/pythonb/work-arm/deps/data/data/com.termux/files/usr/opt/aosp/lib64"
 	        # For aarch64/x86_64, also explicitly add lib path since OpenSSL may
 	        # be in the standard lib directory even on 64-bit Android.
 	        LDFLAGS+=" -L${DEPS_PREFIX}/lib64"
