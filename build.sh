@@ -535,7 +535,6 @@ python_configure_args() {
 # 6. Build
 ##############################################################################
 build_python() {
-    tree "$DEPS_ROOT"
 	cd "$WORKDIR/src"
 	find /__w/pythonb/pythonb -maxdepth 99 -name 'libcrypto*' -o -name 'libssl*'
 	echo "[*] Configuring for $TERMUX_ARCH ($TERMUX_HOST_PLATFORM), API $TERMUX_PKG_API_LEVEL"
