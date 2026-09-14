@@ -1,21 +1,21 @@
 # Security Policy
 
-## Supported Versions
+## Scope
 
-Use this section to tell people about which versions of your project are
-currently being supported with security updates.
-
-| Version | Supported          |
-| ------- | ------------------ |
-| 5.1.x   | :white_check_mark: |
-| 5.0.x   | :x:                |
-| 4.0.x   | :white_check_mark: |
-| < 4.0   | :x:                |
+This repository maintains a build and release pipeline for Termux CPython.
+The versions currently configured are listed in `build.sh` and `README.md`;
+their inclusion does not imply a separate security maintenance guarantee.
+Use current builds and keep Termux runtime dependencies up to date.
 
 ## Reporting a Vulnerability
 
-Use this section to tell people how to report a vulnerability.
+For a vulnerability in this repository's scripts, patches, or release process,
+use GitHub's private vulnerability reporting option under the repository's
+Security tab when available. Otherwise, open an issue requesting a private
+reporting channel without publishing exploit details or sensitive information.
+Include the affected commit or release, architecture, and reproduction steps
+in the private report.
 
-Tell them where to go, how often they can expect to get an update on a
-reported vulnerability, what to expect if the vulnerability is accepted or
-declined, etc.
+Report vulnerabilities in upstream CPython to the Python security team using
+https://www.python.org/dev/security/. Report issues in Termux packages through
+the Termux project's security reporting process.

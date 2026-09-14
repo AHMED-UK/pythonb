@@ -58,9 +58,7 @@ jobs:
         env:
           TERMUX_ARCH: ${{ matrix.target_arch }}
           PYTHON_VERSION: ${{ matrix.python_version }}
-        run: |
-          chmod +x ./build.sh
-          ./build.sh
+        run: bash build.sh
 
       - name: Upload build artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -88,12 +86,14 @@ jobs:
 
       - name: Resolve release tag
         id: tag
+        env:
+          RELEASE_TAG: ${{ github.event.inputs.release_tag }}
         run: |
-          if [ "${{ github.event_name }}" = "push" ]; then
-            echo "tag=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
-          else
-            echo "tag=${{ github.event.inputs.release_tag }}" >> "$GITHUB_OUTPUT"
+          if [ "$GITHUB_EVENT_NAME" = "push" ]; then
+            RELEASE_TAG="$GITHUB_REF_NAME"
           fi
+          git check-ref-format "refs/tags/$RELEASE_TAG"
+          printf 'tag=%s\n' "$RELEASE_TAG" >> "$GITHUB_OUTPUT"
 
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3

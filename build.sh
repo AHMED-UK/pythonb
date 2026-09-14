@@ -8,8 +8,8 @@
 # fetched from the zrsx/cpython3 GitHub releases (see the version table below).
 # Override with PYTHON_VERSION=<ver> to select a different entry.
 #
-# Usage: TERMUX_ARCH=aarch64 ./build.sh
-# Usage: TERMUX_ARCH=aarch64 PYTHON_VERSION=3.14.7 ./build.sh
+# Usage: TERMUX_ARCH=aarch64 bash build.sh
+# Usage: TERMUX_ARCH=aarch64 PYTHON_VERSION=3.14.7 bash build.sh
 #
 set -euo pipefail
 
@@ -23,10 +23,12 @@ _MAJOR_VERSION="${PYTHON_VERSION%.*}"                 # e.g. 3.13 or 3.14
 # Add a new stanza here when bumping or adding a Python version.
 case "$PYTHON_VERSION" in
     3.13.15)
+        DEB_CONFLICTS="python, python3.14"
         SRC_SHA256="5791f121f6c6e92420268a8be504156571cb1e1c74f0699a6b5c7e3216360255"
         UPSTREAM_SRC_SHA256="1e66a7945a48390ee4c2a4268a0e4185884059a13c4aab6d148aa208deea4a76"
         ;;
     3.14.7)
+        DEB_CONFLICTS="python, python3.13"
         SRC_SHA256="ca072950774d284f5300c5db95b5e71b3dbb1693bf3ff98740a1550d97102e17"
         UPSTREAM_SRC_SHA256="3b48dac8fb59f62eaa67ac83c1eb12bda1b7a08406dd286e252c11a66be27f81"
         ;;
@@ -48,9 +50,9 @@ TERMUX_ARCH="${TERMUX_ARCH:-aarch64}"
 TERMUX_APT_URL="https://packages-cf.termux.dev/apt/termux-main"
 # Runtime + build libs that python links against. Names match termux-main .debs.
 TERMUX_DEPS=(
-	aosp-libs aosp-utils ca-certificates
+	ca-certificates
 	gdbm libandroid-posix-semaphore libandroid-support libbz2
-	libexpat libffi liblzma libsqlite libuuid ncurses ncurses-ui-libs openssl openssl-tool
+	libexpat libffi liblzma libsqlite libuuid ncurses ncurses-ui-libs openssl
 	readline zlib zstd
 )
 
@@ -171,8 +173,8 @@ setup_deps() {
 			$1=="Filename:" && cur==pkg {print $2; exit}
 		' "$pkgindex")
 		if [ -z "$fname" ]; then
-			echo "    [!] $dep not found in index, skipping"
-			continue
+			echo "    [!] Required dependency '$dep' not found in $pkgindex"
+			return 1
 		fi
 		local deb="$DOWNLOADS/debs-${TERMUX_ARCH}/$(basename "$fname")"
 		if [ ! -f "$deb" ]; then
@@ -290,12 +292,24 @@ setup_libxcrypt() {
 
 	# Keep only the static library, like libmpdec: linking libcrypt statically
 	# drops the runtime dependency on a crypt provider package.
-	rm -f "$DEPS_PREFIX"/lib/libcrypt*.so* "$DEPS_PREFIX"/lib/libxcrypt*.so*
+	# Match the library name exactly: libcrypt*.so* also deletes OpenSSL's libcrypto.
+	rm -f "$DEPS_PREFIX"/lib/libcrypt.so "$DEPS_PREFIX"/lib/libcrypt.so.* \
+		"$DEPS_PREFIX"/lib/libxcrypt.so "$DEPS_PREFIX"/lib/libxcrypt.so.*
 	if [ ! -f "$DEPS_PREFIX/lib/libcrypt.a" ]; then
 		echo "[!] libxcrypt build failed: $DEPS_PREFIX/lib/libcrypt.a missing"
 		exit 1
 	fi
 	echo "    [ok] libcrypt.a at $DEPS_PREFIX/lib"
+}
+
+check_openssl_deps() {
+	local file
+	for file in include/openssl/ssl.h lib/libssl.so lib/libcrypto.so; do
+		if [ ! -f "$DEPS_PREFIX/$file" ]; then
+			echo "[!] OpenSSL dependency missing or broken: $DEPS_PREFIX/$file"
+			return 1
+		fi
+	done
 }
 
 ##############################################################################
@@ -449,15 +463,6 @@ python_configure_args() {
 	LDFLAGS+=" -L${SYSROOT}/usr/lib/${TERMUX_HOST_PLATFORM}"
 	# multiprocessing posix semaphore lib.
 	LDFLAGS+=" -landroid-posix-semaphore"
-	case "$TERMUX_ARCH" in
-	    arm|i686)
-	        LDFLAGS+=" -L${TERMUX_PREFIX}/opt/aosp/lib"
-	        ;;
-	    aarch64|x86_64)
-	        LDFLAGS+=" -L${TERMUX_PREFIX}/opt/aosp/lib64"
-	        ;;
-	esac
-	LDFLAGS+=" -lssl -lcrypto"
 	export LIBS=" -landroid-posix-semaphore"
 	export LIBCRYPT_LIBS="-lcrypt"
 
@@ -486,7 +491,7 @@ python_configure_args() {
 		# scripts/setup-mpdec.sh.
 		"--with-system-libmpdec"
 		"--with-openssl=${DEPS_PREFIX}"
-		"--with-openssl-rpath=auto"
+		"--with-openssl-rpath=${TERMUX_PREFIX}/lib"
 		# ThinLTO for python/libpython (clang + ld.lld + llvm-ar/ranlib are
 		# already in use, which is exactly what configure's LTO check needs).
 		# libmpdec.a stays non-LTO object code; lld links mixed inputs fine.
@@ -534,7 +539,6 @@ python_configure_args() {
 ##############################################################################
 build_python() {
 	cd "$WORKDIR/src"
-	find /__w/pythonb/pythonb -maxdepth 99 -name 'libcrypto*' -o -name 'libssl*'
 	echo "[*] Configuring for $TERMUX_ARCH ($TERMUX_HOST_PLATFORM), API $TERMUX_PKG_API_LEVEL"
 	echo "    CFLAGS=$CFLAGS"
 	echo "    LDFLAGS=$LDFLAGS"
@@ -543,17 +547,30 @@ build_python() {
 	rm -rf "$WORKDIR/install"
 	make install DESTDIR="$WORKDIR/install"
 
+	check_python_modules
+	build_deb
+}
+
+check_python_modules() {
 	# Verify the important extension modules were built (termux post_massage check).
 	local dynload="$WORKDIR/install${TERMUX_PREFIX}/lib/python${_MAJOR_VERSION}/lib-dynload"
-	for module in _bz2 _curses _decimal _lzma _multiprocessing _sqlite3 _ssl zlib _zstd; do
-		if ! ls "${dynload}/${module}".*.so >/dev/null 2>&1; then
-			echo "[!] WARNING: python module '$module' was not built"
+	local module file found missing=0
+	for module in _bz2 _curses _decimal _hashlib _lzma _multiprocessing _sqlite3 _ssl zlib _zstd; do
+		found=0
+		for file in "${dynload}/${module}".*.so; do
+			if [ -f "$file" ]; then
+				found=1
+				break
+			fi
+		done
+		if [ "$found" -eq 0 ]; then
+			echo "[!] Required python module '$module' was not built"
+			missing=1
 		else
 			echo "    [ok] $module"
 		fi
 	done
-
-	build_deb
+	return "$missing"
 }
 
 ##############################################################################
@@ -565,7 +582,7 @@ build_python() {
 ##############################################################################
 # Runtime dependencies python links against (libmpdec and libcrypt are
 # static, so omitted).
-DEB_DEPENDS="gdbm, libandroid-posix-semaphore, libandroid-support, libbz2, libexpat, libffi, liblzma, libsqlite, libuuid, ncurses, openssl, readline, zlib, zstd"
+DEB_DEPENDS="gdbm, libandroid-posix-semaphore, libandroid-support, libbz2, libexpat, libffi, liblzma, libsqlite, libuuid, ncurses, ncurses-ui-libs, openssl, readline, zlib, zstd"
 DEB_MAINTAINER="${DEB_MAINTAINER:-Termux <root@localhost>}"
 
 build_deb() {
@@ -587,6 +604,7 @@ Architecture: ${TERMUX_DEB_ARCH}
 Maintainer: ${DEB_MAINTAINER}
 Installed-Size: ${installed_size}
 Depends: ${DEB_DEPENDS}
+Conflicts: ${DEB_CONFLICTS}
 Homepage: https://www.python.org/
 Description: Python programming language (CPython ${PYTHON_VERSION}) for Termux
  Cross-compiled with the same toolchain and configure flags as
@@ -617,8 +635,11 @@ main() {
 	setup_deps
 	setup_mpdec
 	setup_libxcrypt
+	check_openssl_deps
 	setup_toolchain_env
 	python_configure_args
 	build_python
 }
-main "$@"
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+	main "$@"
+fi
