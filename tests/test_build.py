@@ -114,7 +114,31 @@ printf '%s\n' "$LDFLAGS" "${CONFIGURE_ARGS[@]}"
                     self.assertNotIn("-lssl", flags)
                     self.assertNotIn("opt/aosp", result.stdout)
                     self.assertIn(f"--with-openssl={self.deps}", lines)
-                    self.assertIn(f"--with-openssl-rpath=/{PREFIX}/lib", lines)
+                    self.assertIn("--with-openssl-rpath=no", lines)
+                    self.assertIn(f"-Wl,-rpath=/{PREFIX}/lib", flags)
+
+    def test_configure_failure_preserves_log_and_exit_status(self):
+        source = self.work / "src"
+        source.mkdir(parents=True)
+        log = source / "config.log"
+        log.write_text("conftest.c: fatal error: conio.h: No such file\n")
+        configure = source / "configure"
+        configure.write_text(
+            '#!/bin/sh\necho "configure: error: actual failure" >&2\nexit 42\n'
+        )
+        configure.chmod(0o755)
+        result = self.run_build('''
+CFLAGS= LDFLAGS=
+CONFIGURE_ARGS=()
+make() { echo SHOULD_NOT_BUILD; }
+build_python
+''')
+        self.assertEqual(result.returncode, 42)
+        self.assertIn("configure: error: actual failure", result.stderr)
+        self.assertIn(str(log), result.stderr)
+        self.assertNotIn("conio.h", result.stdout + result.stderr)
+        self.assertNotIn("SHOULD_NOT_BUILD", result.stdout)
+        self.assertIn("conio.h", log.read_text())
 
     def test_module_gate_stops_packaging(self):
         source = self.work / "src"

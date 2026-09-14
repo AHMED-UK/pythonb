@@ -491,7 +491,9 @@ python_configure_args() {
 		# scripts/setup-mpdec.sh.
 		"--with-system-libmpdec"
 		"--with-openssl=${DEPS_PREFIX}"
-		"--with-openssl-rpath=${TERMUX_PREFIX}/lib"
+		# Explicit paths must exist on the build host; auto embeds the staged
+		# deps path. LDFLAGS already supplies the on-device runtime path.
+		"--with-openssl-rpath=no"
 		# ThinLTO for python/libpython (clang + ld.lld + llvm-ar/ranlib are
 		# already in use, which is exactly what configure's LTO check needs).
 		# libmpdec.a stays non-LTO object code; lld links mixed inputs fine.
@@ -542,12 +544,19 @@ build_python() {
 	echo "[*] Configuring for $TERMUX_ARCH ($TERMUX_HOST_PLATFORM), API $TERMUX_PKG_API_LEVEL"
 	echo "    CFLAGS=$CFLAGS"
 	echo "    LDFLAGS=$LDFLAGS"
-	./configure "${CONFIGURE_ARGS[@]}" || { cat config.log; exit 1; }
+	if ./configure "${CONFIGURE_ARGS[@]}"; then
+		:
+	else
+		local status=$?
+		echo "[!] CPython configure failed (exit $status). Full probe log: $WORKDIR/src/config.log" >&2
+		echo "    Failed optional-header probes in config.log are normal; see the configure error above." >&2
+		return "$status"
+	fi
 	make -j"$(nproc)"
 	rm -rf "$WORKDIR/install"
 	make install DESTDIR="$WORKDIR/install"
 
-	check_python_modules
+	check_python_modules || return 1
 	build_deb
 }
 

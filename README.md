@@ -53,3 +53,12 @@ toolchain and environment.
 Pushing a `v*` tag or dispatching the build workflow builds both Python versions
 for all four architectures and publishes the resulting packages to a GitHub
 release. Manual dispatch accepts the destination release tag.
+Disable `publish_release` on manual dispatch to validate the complete build
+matrix without publishing a release. Each build logs its checked-out commit
+and build-script checksum.
+
+When configure fails, use the final `configure: error:` message to identify
+the blocker. Missing optional headers such as `conio.h`, `bluetooth.h`, and
+`minix/config.h` are expected negative probes on Android. Full `config.log`
+files are retained locally and uploaded as `build-logs-<version>-<arch>`
+artifacts on CI failure.
