@@ -476,7 +476,7 @@ python_configure_args() {
 	        LDFLAGS+=" -L${DEPS_PREFIX}/lib64 -L${DEPS_PREFIX}/opt/aosp/lib64"
 	        ;;
 	esac
-	LDFLAGS+=" -lssl -lcrypto"
+	LDFLAGS+=" -lssl"
 	export LIBS=" -landroid-posix-semaphore"
 	export LIBCRYPT_LIBS="-lcrypt"
 
