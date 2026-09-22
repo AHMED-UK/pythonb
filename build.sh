@@ -425,7 +425,10 @@ setup_toolchain_env() {
 	# python build.sh: libandroid-support is a dependency, link explicitly.
 	LDFLAGS+=" -Wl,--no-as-needed,-landroid-support,--as-needed"
 
-	# CPython 3.13 detects _zstd only via pkg-config (PKG_CHECK_MODULES).
+	export CPPFLAGS="-I$TERMUX_PREFIX/include $CPPFLAGS"
+	export LDFLAGS="-L$TERMUX_PREFIX/lib $LDFLAGS"
+
+   	# CPython 3.13 detects _zstd only via pkg-config (PKG_CHECK_MODULES).
 	# The termux .pc files carry prefix=$TERMUX_PREFIX (the on-device path),
 	# so point pkg-config at the deps pkgconfig dir and use SYSROOT_DIR to
 	# rebase those prefixes into the extracted deps tree.
