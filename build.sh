@@ -439,7 +439,10 @@ setup_toolchain_env() {
 	# python build.sh: libandroid-support is a dependency, link explicitly.
 	LDFLAGS+=" -Wl,--no-as-needed,-landroid-support,--as-needed"
 
-	# CPython 3.13 detects _zstd only via pkg-config (PKG_CHECK_MODULES).
+	export CPPFLAGS="-I$TERMUX_PREFIX/include $CPPFLAGS"
+	export LDFLAGS="-L$TERMUX_PREFIX/lib $LDFLAGS"
+
+   	# CPython 3.13 detects _zstd only via pkg-config (PKG_CHECK_MODULES).
 	# The termux .pc files carry prefix=$TERMUX_PREFIX (the on-device path),
 	# so point pkg-config at the deps pkgconfig dir and use SYSROOT_DIR to
 	# rebase those prefixes into the extracted deps tree.
@@ -452,17 +455,27 @@ setup_toolchain_env() {
 ##############################################################################
 python_configure_args() {
 	# termux python build.sh: -O3 instead of -Oz for python itself.
-	CFLAGS="${CFLAGS/-Oz/-O3}"
+	CFLAGS="${CFLAGS/-Oz/-O3} -I$DEPS_PREFIX/include"
 	# setup.py only probes gcc include paths; make zlib etc. discoverable.
 	# (termux adds the standalone-toolchain sysroot; the stock NDK equivalent
 	# is usr/include plus the per-triple lib dirs.)
-	CPPFLAGS+=" -I${SYSROOT}/usr/include"
+	CPPFLAGS+=" -I${SYSROOT}/usr/include "
 	# Keep symbols in libpython3.so.
 	LDFLAGS="${LDFLAGS/-Wl,--as-needed/}"
 	LDFLAGS+=" -L${SYSROOT}/usr/lib/${TERMUX_HOST_PLATFORM}/${TERMUX_PKG_API_LEVEL}"
 	LDFLAGS+=" -L${SYSROOT}/usr/lib/${TERMUX_HOST_PLATFORM}"
 	# multiprocessing posix semaphore lib.
 	LDFLAGS+=" -landroid-posix-semaphore"
+	case "$TERMUX_ARCH" in
+	    arm|i686)
+	        LDFLAGS+=" -L${DEPS_PREFIX}/lib"
+	        ;;
+	    aarch64|x86_64)
+	        # For aarch64/x86_64, also explicitly add lib path since OpenSSL may
+	        # be in the standard lib directory even on 64-bit Android.
+	        LDFLAGS+=" -L${DEPS_PREFIX}/lib64"
+	        ;;
+	esac
 	export LIBS=" -landroid-posix-semaphore"
 	export LIBCRYPT_LIBS="-lcrypt"
 
