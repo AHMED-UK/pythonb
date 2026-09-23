@@ -455,7 +455,7 @@ setup_toolchain_env() {
 ##############################################################################
 python_configure_args() {
 	# termux python build.sh: -O3 instead of -Oz for python itself.
-	CFLAGS="${CFLAGS/-Oz/-O3} -I$DEPS_PREFIX/include -L${DEPS_PREFIX}/opt/aosp/include"
+	CFLAGS="${CFLAGS/-Oz/-O3} -I$DEPS_PREFIX/include -I${DEPS_PREFIX}/opt/aosp/include"
 	# setup.py only probes gcc include paths; make zlib etc. discoverable.
 	# (termux adds the standalone-toolchain sysroot; the stock NDK equivalent
 	# is usr/include plus the per-triple lib dirs.)
