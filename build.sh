@@ -455,27 +455,32 @@ setup_toolchain_env() {
 ##############################################################################
 python_configure_args() {
 	# termux python build.sh: -O3 instead of -Oz for python itself.
-	CFLAGS="${CFLAGS/-Oz/-O3} -I$DEPS_PREFIX/include"
-	# setup.py only probes gcc include paths; make zlib etc. discoverable.
-	# (termux adds the standalone-toolchain sysroot; the stock NDK equivalent
-	# is usr/include plus the per-triple lib dirs.)
-	CPPFLAGS+=" -I${SYSROOT}/usr/include "
-	# Keep symbols in libpython3.so.
+	# 1. Optimize CFLAGS and include staged dependency headers (no opt/aosp)
+	CFLAGS="${CFLAGS/-Oz/-O3} -I${DEPS_PREFIX}/include"
+
+	# 2. Add staged dependency headers to CPPFLAGS.
+	# NOTE: Do NOT add -I${SYSROOT}/usr/include here; modern NDK Clang (LLVM 22/23) 
+	# automatically manages sysroot header resolution and target-specific <asm/...> dirs.
+	CPPFLAGS+=" -I${DEPS_PREFIX}/include"
+
+	# 3. Keep symbols in libpython3.so
 	LDFLAGS="${LDFLAGS/-Wl,--as-needed/}"
 	LDFLAGS+=" -L${SYSROOT}/usr/lib/${TERMUX_HOST_PLATFORM}/${TERMUX_PKG_API_LEVEL}"
 	LDFLAGS+=" -L${SYSROOT}/usr/lib/${TERMUX_HOST_PLATFORM}"
-	# multiprocessing posix semaphore lib.
+
+	# 4. Multiprocessing POSIX semaphore lib
 	LDFLAGS+=" -landroid-posix-semaphore"
+
+	# 5. Add architecture dependency library paths (no opt/aosp and no global -lssl)
 	case "$TERMUX_ARCH" in
 	    arm|i686)
 	        LDFLAGS+=" -L${DEPS_PREFIX}/lib"
 	        ;;
 	    aarch64|x86_64)
-	        # For aarch64/x86_64, also explicitly add lib path since OpenSSL may
-	        # be in the standard lib directory even on 64-bit Android.
-	        LDFLAGS+=" -L${DEPS_PREFIX}/lib64"
+	        LDFLAGS+=" -L${DEPS_PREFIX}/lib64 -L${DEPS_PREFIX}/lib"
 	        ;;
 	esac
+
 	export LIBS=" -landroid-posix-semaphore"
 	export LIBCRYPT_LIBS="-lcrypt"
 
